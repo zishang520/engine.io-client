@@ -1,5 +1,9 @@
 package config
 
+type PerMessageDeflate struct {
+	Threshold int
+}
+
 type SocketOptions struct {
 
 	// The host that we're connecting to. Set from the URI passed when connecting
@@ -131,7 +135,7 @@ type SocketOptions struct {
 
 	// parameters of the WebSocket permessage-deflate extension (see ws module api docs). Set to false to disable.
 	// @default nil
-	perMessageDeflate *types.PerMessageDeflate
+	perMessageDeflate *PerMessageDeflate
 
 	// The path to get our client file from, in the case of the server
 	// serving it
