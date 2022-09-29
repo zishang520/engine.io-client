@@ -8,8 +8,8 @@ import (
 )
 
 type CloseDetails struct {
-	description string
-	context     any
+	Description string
+	Context     any
 }
 
 type Transport struct {

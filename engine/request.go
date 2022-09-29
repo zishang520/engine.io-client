@@ -1,5 +1,9 @@
 package engine
 
+import (
+	"net/url"
+)
+
 type Request struct {
 	opts          any
 	method        any
@@ -14,7 +18,7 @@ type Request struct {
 }
 
 // Request constructor
-func NewRequest(uri any, opts any) {}
+func NewRequest(uri *url.URL, opts any) {}
 
 // Creates the XHR object and sends the request.
 func (r *Request) create() {}
