@@ -136,7 +136,7 @@ func (p *Polling) write(packets []*packet.Packet) {
 }
 
 // Generates uri for connection.
-func (p *Polling) uri() *url.URL {
+func (p *Polling) uri() string {
 	url := new(url.URL)
 	query := *p.query
 	url.Scheme = "http"
@@ -164,7 +164,7 @@ func (p *Polling) uri() *url.URL {
 		port = ":" + p.opts.port
 	}
 	url.Host = host + port
-	return url
+	return url.String()
 }
 
 // Creates a request.
