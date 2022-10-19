@@ -19,7 +19,7 @@ type Polling struct {
 }
 
 // XHR Polling constructor.
-func NewPolling(opts any) {
+func NewPolling(opts SocketOptions) {
 	p := &Polling{}
 	p.Transport = NewTransport(opts)
 	p._polling = false
@@ -165,7 +165,7 @@ func (p *Polling) uri() string {
 	if p.opts.secure {
 		url.Scheme = "https"
 	}
-	query := *p.query
+	query := url.Values(p.query.All())
 	// cache busting is forced
 	if false != p.opts.timestampRequests {
 		query.Set(p.opts.timestampParam, "yeast();")

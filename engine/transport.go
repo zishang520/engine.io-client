@@ -1,6 +1,7 @@
 package engine
 
 import (
+	"net/url"
 	"sync"
 
 	"github.com/zishang520/engine.io-client/errors"
@@ -19,7 +20,7 @@ type Transport struct {
 
 	opts           SocketOptions
 	supportsBinary bool
-	query          any
+	query          url.Values
 	_readyState    string
 	_writable      bool
 	socket         any
@@ -99,7 +100,7 @@ func (t *Transport) Close() *Transport {
 }
 
 // Sends multiple packets.
-func (t *Transport) Send(packets any) {
+func (t *Transport) Send(packets []*packet.Packet) {
 	if "open" == t.readyState() {
 		t.write(packets)
 	} else {

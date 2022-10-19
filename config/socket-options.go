@@ -1,5 +1,11 @@
 package config
 
+import (
+	"net/url"
+
+	"github.com/zishang520/engine.io/utils"
+)
+
 type PerMessageDeflate struct {
 	Threshold int
 }
@@ -19,7 +25,7 @@ type SocketOptions struct {
 	port string
 
 	// Any query parameters in our uri. Set from the URI passed when connecting
-	query map[string]any
+	query *utils.ParameterBag
 
 	// `http.Agent` to use, defaults to `false` (NodeJS only)
 	agent string
@@ -47,8 +53,8 @@ type SocketOptions struct {
 	// A list of transports to try (in order). Engine.io always attempts to
 	// connect directly with the first one, provided the feature detection test
 	// for it passes.
-	// @default []string{'polling','websocket'}
-	transports []string
+	// @default types.NewSet("polling", "websocket")
+	transports *types.Set[string]
 
 	// The port the policy server listens on
 	// @default 843

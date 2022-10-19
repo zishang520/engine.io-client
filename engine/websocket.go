@@ -1,6 +1,8 @@
 package engine
 
 import (
+	"net/url"
+
 	"github.com/gorilla/websocket"
 )
 
@@ -171,7 +173,7 @@ func (w *WS) uri() string {
 	if p.opts.secure {
 		url.Scheme = "wss"
 	}
-	query := *p.query
+	query := url.Values(p.query.All())
 	// cache busting is forced
 	if false != p.opts.timestampRequests {
 		query.Set(p.opts.timestampParam, "yeast();")
@@ -188,7 +190,7 @@ func (w *WS) uri() string {
 	}
 	port := ""
 	// avoid port if default for schema
-	if p.opts.port && (("https" == url.Scheme && p.opts.port != "443") || ("http" == url.Scheme && p.opts.port != "80")) {
+	if p.opts.port && (("wss" == url.Scheme && p.opts.port != "443") || ("ws" == url.Scheme && p.opts.port != "80")) {
 		port = ":" + p.opts.port
 	}
 	url.Host = host + port
