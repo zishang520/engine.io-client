@@ -2,12 +2,12 @@ package errors
 
 type TransportError struct {
 	Message     string
-	Description any
+	Description error
 	Context     any
 	Type        string //"TransportError"
 }
 
-func NewTransportError(reason string, description any, context any) *Error {
+func NewTransportError(reason string, description error, context any) *Error {
 	return &TransportError{
 		Message:     reason,
 		Description: description,

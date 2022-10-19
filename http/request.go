@@ -1,54 +1,54 @@
 package http
 
 import (
+	"compress/flate"
+	"compress/gzip"
+	"io"
+	"net/http"
 	"net/url"
+	"strings"
+	"time"
 
+	"github.com/andybalholm/brotli"
 	"github.com/zishang520/engine.io/events"
+	"github.com/zishang520/engine.io/types"
 )
 
 type Response struct {
 	*http.Response
+
 	BodyBuffer *bytes.Buffer
 }
 
 type Options struct {
-	Method  string
-	Headers map[string]string
-	Timeout time.Duration
-	Body    io.Reader
+	Method   string
+	Headers  map[string]string
+	Compress bool
+	Timeout  time.Duration
+	Body     io.Reader
+	Jar      http.CookieJar
 }
 
 type Request struct {
-	events.EventEmitter
-
+	uri     string
 	options *Options
-	Method  string
-	Url     string
-	Data    io.Reader
-	xhr     any
-	index   any
 }
 
 // Request constructor
-func NewRequest(uri string, opts *Options) *Request {
+func NewRequest(uri string, opts *Options) (*Response, error) {
 	r := &Request{}
-	r.EventEmitter = events.New()
 
-	r.opts = opts
-	r.method = opts.Method
 	r.uri = uri
-	r.data = opts.data
-	r.create()
+	r.options = opts
 
-	return *Request
+	return r.create()
 }
 
-// Creates the XHR object and sends the request.
 func (r *Request) create() {
-	client := &http.Client{}
-	if r.options.Timeout == 0 {
-		client.Timeout = 30 * time.Second
-	} else {
+	client := &http.Client{
+		Jar: r.options.Jar,
+	}
+	if r.options.Timeout > 0 {
 		client.Timeout = r.options.Timeout
 	}
 	request, err := http.NewRequest(strings.ToUpper(r.options.Method), r.uri, r.options.Body)
@@ -64,7 +64,9 @@ func (r *Request) create() {
 		request.Header.Set("Content-Type", "text/plain;charset=UTF-8")
 	}
 	request.Header.Set("Accept", "*/*")
-	request.Header.Set("Accept-Encoding", "gzip, deflate, br")
+	if r.options.Compress {
+		request.Header.Set("Accept-Encoding", "gzip, deflate, br")
+	}
 
 	response, err := client.Do(request)
 	if err != nil {
@@ -77,7 +79,7 @@ func (r *Request) create() {
 	if response.Body != nil {
 		defer response.Body.Close()
 
-		body := bytes.NewBuffer(nil)
+		body := types.NewStringBuffer(nil)
 		switch response.Header.Get("Content-Encoding") {
 		case "gzip":
 			gz, err := gzip.NewReader(response.Body)
@@ -114,15 +116,3 @@ func (r *Request) create() {
 	}
 	return res, nil
 }
-
-// Called upon error.
-func (r *Request) onError() {}
-
-// Cleans up house.
-func (r *Request) cleanup() {}
-
-// Called upon load.
-func (r *Request) onLoad() {}
-
-// Aborts the request.
-func (r *Request) Abort() {}
