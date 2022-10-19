@@ -33,7 +33,7 @@ type Transport struct {
 }
 
 // Transport abstract constructor.
-func NewTransport(opts any) {
+func NewTransport(opts SocketOptions) {
 	t := &Transport{}
 
 	t.EventEmitter = events.New()
@@ -93,7 +93,7 @@ func (t *Transport) Open() {
 func (t *Transport) Close() *Transport {
 	if "opening" == t.readyState() || "open" == t.readyState() {
 		t.doClose()
-		t.onClose()
+		t.onClose(nil)
 	}
 	return t
 }
@@ -131,9 +131,6 @@ func (t *Transport) onClose(details *CloseDetails) {
 	t.Emit("close", details)
 }
 
-func (t *Transport) _doOpen() any {
-}
-func (t *Transport) _doClose() any {
-}
-func (t *Transport) _write(packets []*packet.Packet) any {
-}
+func (t *Transport) _doOpen()                {}
+func (t *Transport) _doClose()               {}
+func (t *Transport) _write([]*packet.Packet) {}
