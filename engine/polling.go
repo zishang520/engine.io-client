@@ -91,7 +91,7 @@ func (p *Polling) pause(onPause func()) {
 // Starts polling cycle.
 func (p *Polling) Poll() {
 	p.setPolling(true)
-	p.doPoll()
+	go p.doPoll()
 	p.Emit("poll")
 }
 
@@ -150,7 +150,7 @@ func (p *Polling) _doClose() {
 func (p *Polling) _write(packets []*packet.Packet) {
 	t.setWritable(false)
 	data, _ := parser.Parserv4().EncodePayload(packets)
-	t.doWrite(data, func() {
+	go t.doWrite(data, func() {
 		t.setWritable(true)
 		t.Emit("drain")
 	})
@@ -158,13 +158,14 @@ func (p *Polling) _write(packets []*packet.Packet) {
 
 // Generates uri for connection.
 func (p *Polling) uri() string {
-	url := new(url.URL)
-	query := *p.query
-	url.Scheme = "http"
+	url := &url.URL{
+		Path:   p.opts.path,
+		Scheme: "http",
+	}
 	if p.opts.secure {
 		url.Scheme = "https"
 	}
-	url.Path = p.opts.path
+	query := *p.query
 	// cache busting is forced
 	if false != p.opts.timestampRequests {
 		query.Set(p.opts.timestampParam, "yeast();")
