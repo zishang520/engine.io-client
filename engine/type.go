@@ -2,11 +2,11 @@ package engine
 
 type TransportInterface interface {
 	// Emits an error.
-	onError(string, error, any) *Transport
+	onError(string, error, any)
 	// Opens the transport.
 	Open()
 	// Closes the transport.
-	Close() *Transport
+	Close()
 	// Sends multiple packets.
 	Send([]*packet.Packet)
 	// Called upon open

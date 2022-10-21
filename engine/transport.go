@@ -8,6 +8,7 @@ import (
 	"github.com/zishang520/engine.io/events"
 	"github.com/zishang520/engine.io/packet"
 	"github.com/zishang520/engine.io/parser"
+	"github.com/zishang520/engine.io/utils"
 )
 
 type CloseDetails struct {
@@ -20,7 +21,7 @@ type Transport struct {
 
 	opts           SocketOptions
 	supportsBinary bool
-	query          url.Values
+	query          *utils.ParameterBag
 	_readyState    string
 	_writable      bool
 	socket         any
@@ -76,9 +77,8 @@ func (t *Transport) writable() bool {
 }
 
 // Emits an error.
-func (t *Transport) onError(reason string, description error, context any) *Transport {
+func (t *Transport) onError(reason string, description error, context any) {
 	t.Emit("error", errors.NewTransportError(reason, description, context).Err())
-	return t
 }
 
 // Opens the transport.
@@ -91,12 +91,11 @@ func (t *Transport) Open() {
 }
 
 // Closes the transport.
-func (t *Transport) Close() *Transport {
+func (t *Transport) Close() {
 	if "opening" == t.readyState() || "open" == t.readyState() {
 		t.doClose()
 		t.onClose(nil)
 	}
-	return t
 }
 
 // Sends multiple packets.

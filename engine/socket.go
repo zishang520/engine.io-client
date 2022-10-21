@@ -19,18 +19,18 @@ type Socket struct {
 	binaryType           string
 	readyState           string
 	writeBuffer          []*packet.Packet
-	prevBufferLen        any
+	prevBufferLen        int
 	upgrades             *types.Set[string]
 	pingInterval         *utils.Timer
 	pingTimeout          *utils.Timer
 	pingTimeoutTimer     *utils.Timer
 	offlineEventListener any
-	upgrading            any
+	upgrading            bool
 	maxPayload           any
-	opts                 any
+	opts                 SocketOptions
 	secure               bool
-	hostname             any
-	port                 any
+	hostname             string
+	port                 string
 	transports           *types.Set[string]
 	protocol             int
 }
@@ -169,8 +169,97 @@ func (s *Socket) setTransport(transport TransportInterface) {
 func (s *Socket) probe(name string) {
 	transport := s.createTransport(name)
 	priorWebsocketSuccess = false
-
-	// onTransportOpen:=
+	failed := false
+	onTransportOpen := func() {
+		if failed {
+			return
+		}
+		transport.Send([]*packet.Packet{
+			&packet.Packet{
+				Type: packet.PING,
+				Data: types.NewStringBufferString("probe"),
+			},
+		})
+		transport.Once("packet", func(msgs ...any) {
+			if failed {
+				return
+			}
+			msg := msg[0].(*packet.Packet)
+			sb := new(strings.Builder)
+			io.Copy(sb, data.Data)
+			if packet.PONG == msg.Type && "probe" == sb.String() {
+				s.upgrading = true
+				s.Emit("upgrading", transport)
+				if !transport {
+					return
+				}
+				priorWebsocketSuccess = "websocket" == transport.Name()
+				s.transport.pause(func() {
+					if failed {
+						return
+					}
+					if "closed" == s.readyState {
+						return
+					}
+					cleanup()
+					s.setTransport(transport)
+					transport.Send([]*packet.Packet{
+						&packet.Packet{
+							Type: packet.UPGRADE,
+							Data: types.NewStringBufferString("probe"),
+						},
+					})
+					s.Emit("upgrade", transport)
+					transport = nil
+					s.upgrading = false
+					s.flush()
+				})
+			} else {
+				s.Emit("upgradeError", errors.New("["+transport.Name()+"] probe error"))
+			}
+		})
+		freezeTransport := func() {
+			if failed {
+				return
+			}
+			// Any callback called by transport should be ignored since now
+			failed = true
+			cleanup()
+			transport.Close()
+		}
+		// Handle any error that happens while probing
+		onerror := func(err string) {
+			e := errors.New("[" + transport.Name() + "] probe error: " + err)
+			freezeTransport()
+			this.Emit("upgradeError", e)
+		}
+		onTransportClose := func(...any) {
+			onerror("transport closed")
+		}
+		// When the socket is closed while we're probing
+		onclose := func(...any) {
+			onerror("socket closed")
+		}
+		onupgrade := func(to TransportInterface) {
+			if transport != nil && to.Name() != transport.Name() {
+				freezeTransport()
+			}
+		}
+		// Remove all listeners on the transport and on self
+		cleanup := func() {
+			transport.RemoveListener("open", onTransportOpen)
+			transport.RemoveListener("error", onerror)
+			transport.RemoveListener("close", onTransportClose)
+			s.RemoveListener("close", onclose)
+			s.RemoveListener("upgrading", onupgrade)
+		}
+		transport.Once("open", onTransportOpen)
+		transport.Once("error", onerror)
+		transport.Once("close", onTransportClose)
+		s.Once("close", onclose)
+		s.Once("upgrading", onupgrade)
+		transport.Open()
+	}
 }
 
 // Called when connection is deemed open.
@@ -189,10 +278,50 @@ func (s *Socket) onOpen() {
 }
 
 // Handles a packet.
-func (s *Socket) onPacket() {}
+func (s *Socket) onPacket(msg) {
+	if "opening" == s.readyState ||
+		"open" == s.readyState ||
+		"closing" == s.readyState {
+		// debug('socket receive: type "%s", data "%s"', msg.type, msg.data);
+		s.Emit("packet", msg)
+		// Socket is live - any packet counts
+		s.Emit("heartbeat")
+		switch msg.Type {
+		case packet.OPEN:
+			s.onHandshake(JSON.parse(msg.Data))
+		case packet.PING:
+			s.resetPingTimeout()
+			s.sendPacket("pong")
+			s.Emit("ping")
+			s.Emit("pong")
+		case packet.ERROR:
+			err := errors.New("server error")
+			s.onError(err)
+		case packet.MESSAGE:
+			s.Emit("data", msg.Data)
+			s.Emit("message", msg.Data)
+		}
+	} else {
+		// debug('packet received with socket readyState "%s"', this.readyState);
+	}
+}
 
 // Called upon handshake completion.
-func (s *Socket) onHandshake() {}
+func (s *Socket) onHandshake(data) {
+	s.Emit("handshake", data)
+	s.id = data.sid
+	s.transport.query.Set("sid", data.sid)
+	s.upgrades = s.filterUpgrades(data.upgrades)
+	s.pingInterval = data.pingInterval
+	s.pingTimeout = data.pingTimeout
+	s.maxPayload = data.maxPayload
+	s.onOpen()
+	// In case open handler closes socket
+	if "closed" == s.readyState {
+		return
+	}
+	s.resetPingTimeout()
+}
 
 // Sets and resets ping timeout timer based on server pings.
 func (s *Socket) resetPingTimeout() {}
