@@ -2,6 +2,7 @@ package engine
 
 import (
 	"net/url"
+	"sync"
 
 	"github.com/zishang520/engine.io/events"
 	"github.com/zishang520/engine.io/parser"
@@ -9,7 +10,30 @@ import (
 	"github.com/zishang520/engine.io/utils"
 )
 
-var priorWebsocketSuccess bool
+type socketState struct {
+	priorWebsocketSuccess bool
+	mu                    sync.RWMutex
+}
+
+func (ss *socketState) get() bool {
+	ss.mu.RLock()
+	defer ss.mu.RUnlock()
+
+	return ss.priorWebsocketSuccess
+}
+
+func (ss *socketState) set(state bool) {
+	ss.mu.Lock()
+	defer ss.mu.Unlock()
+
+	ss.priorWebsocketSuccess = state
+}
+
+var (
+	SocketState *socketState = &socketState{}
+)
+
+const Protocol int = parser.Parserv4().Protocol()
 
 type Socket struct {
 	events.EventEmitter
@@ -132,7 +156,7 @@ func (s *Socket) createTransport(name string) {
 // Initializes transport to use and starts probe.
 func (s *Socket) open() {
 	name := ""
-	if s.opts.rememberUpgrade && priorWebsocketSuccess && s.transports.Has("websocket") {
+	if s.opts.rememberUpgrade && SocketState.get() && s.transports.Has("websocket") {
 		name = "websocket"
 	} else if s.transports.Len() == 0 {
 		go s.Emit("error", "No transports available")
@@ -161,14 +185,14 @@ func (s *Socket) setTransport(transport TransportInterface) {
 	// set up transport listeners
 	transport.On("drain", func(...any) { s.onDrain() })
 	transport.On("packet", func(...any) { s.onPacket() })
-	transport.On("error", func(...any) { s.onError() })
+	transport.On("error", func(e ...any) { s.onError(e[0]) })
 	transport.On("close", func(reason ...any) { s.onClose("transport close", reason[0]) })
 }
 
 // Probes a transport.
 func (s *Socket) probe(name string) {
 	transport := s.createTransport(name)
-	priorWebsocketSuccess = false
+	SocketState.set(false)
 	failed := false
 	onTransportOpen := func() {
 		if failed {
@@ -193,7 +217,7 @@ func (s *Socket) probe(name string) {
 				if !transport {
 					return
 				}
-				priorWebsocketSuccess = "websocket" == transport.Name()
+				SocketState.set("websocket" == transport.Name())
 				s.transport.pause(func() {
 					if failed {
 						return
@@ -265,7 +289,7 @@ func (s *Socket) probe(name string) {
 // Called when connection is deemed open.
 func (s *Socket) onOpen() {
 	s.readyState = "open"
-	priorWebsocketSuccess = "websocket" == s.transport.Name()
+	priorWebsocketSuccess.set("websocket" == s.transport.Name())
 	s.Emit("open")
 	s.flush()
 	// we check for `readyState` in case an `open`
@@ -324,32 +348,173 @@ func (s *Socket) onHandshake(data) {
 }
 
 // Sets and resets ping timeout timer based on server pings.
-func (s *Socket) resetPingTimeout() {}
+func (s *Socket) resetPingTimeout() {
+	s.clearTimeoutFn(s.pingTimeoutTimer)
+	s.pingTimeoutTimer = utils.SetTimeOut(func() {
+		s.onClose("ping timeout")
+	}, s.pingInterval+s.pingTimeout)
+	// if s.opts.autoUnref {
+	// 	s.pingTimeoutTimer.Unref()
+	// }
+}
 
 // Called on `drain` event
-func (s *Socket) onDrain() {}
+func (s *Socket) onDrain() {
+	s.writeBuffer = s.writeBuffer[s.prevBufferLen:]
+	// setting prevBufferLen = 0 is very important
+	// for example, when upgrading, upgrade packet is sent over,
+	// and a nonzero prevBufferLen could cause problems on `drain`
+	s.prevBufferLen = 0
+	if 0 == len(s.writeBuffer) {
+		s.Emit("drain")
+	} else {
+		s.flush()
+	}
+}
 
 // Flush write buffers.
-func (s *Socket) flush() {}
+func (s *Socket) flush() {
+	if "closed" != s.readyState && s.transport.writable && !s.upgrading && len(s.writeBuffer) > 0 {
+		packets := s.getWritablePackets()
+		// debug("flushing %d packets in socket", packets.length)
+		s.transport.Send(packets)
+		// keep track of current length of writeBuffer
+		// splice writeBuffer and callbackBuffer on `drain`
+		s.prevBufferLen = len(packets)
+		s.Emit("flush")
+	}
+}
 
 // Ensure the encoded size of the writeBuffer is below the maxPayload value sent by the server (only for HTTP
-func (s *Socket) getWritablePackets() {}
+func (s *Socket) getWritablePackets() []*packet.Packet {
+	shouldCheckPayloadSize := s.maxPayload &&
+		s.transport.name == "polling" &&
+		len(s.writeBuffer) > 1
+	if !shouldCheckPayloadSize {
+		return s.writeBuffer
+	}
+	payloadSize := 1 // first packet type
+	for i, data := range s.writeBuffer {
+		if data != nil {
+			payloadSize += data.Len()
+		}
+		if i > 0 && payloadSize > s.maxPayload {
+			// debug("only send %d out of %d packets", i, s.writeBuffer.length)
+			return s.writeBuffer[0:i]
+		}
+		payloadSize += 2 // separator + packet type
+	}
+	// debug("payload size is %d (max: %d)", payloadSize, s.maxPayload);
+	return s.writeBuffer
+}
 
 // Sends a message.
-func (s *Socket) Write(msg any, options any, fn any) *Socket {}
-func (s *Socket) Send(msg any, options any, fn any) *Socket  {}
+func (s *Socket) Write(msg io.Reader, options *packet.Options, fn any) *Socket {
+	s.sendPacket("message", msg, options, fn)
+	return s
+}
+func (s *Socket) Send(msg io.Reader, options *packet.Options, fn any) *Socket {
+	s.sendPacket("message", msg, options, fn)
+	return s
+}
 
 // Sends a packet.
-func (s *Socket) sendPacket() {}
+func (s *Socket) sendPacket(t string, data io.Reader, options *packet.Options, fn any) {
+	if "closing" == s.readyState || "closed" == s.readyState {
+		return
+	}
+	packet := &packet.Packet{
+		Type:    t,
+		Data:    data,
+		Options: options,
+	}
+	s.Emit("packetCreate", packet)
+	s.writeBuffer = append(s.writeBuffer, packet)
+	if fn != nil {
+		s.Once("flush", fn)
+	}
+	s.flush()
+}
 
 // Closes the connection.
-func (s *Socket) Close() *Socket {}
+func (s *Socket) Close() *Socket {
+	close := func() {
+		s.onClose("forced close")
+		// debug("socket closing - telling transport to close")
+		s.transport.Close()
+	}
+	cleanupAndClose := func(...any) {
+		s.RemoveListener("upgrade", cleanupAndClose)
+		s.RemoveListener("upgradeError", cleanupAndClose)
+		close()
+	}
+	waitForUpgrade := func() {
+		// wait for upgrade to finish since we can't send packets while pausing a transport
+		s.Once("upgrade", cleanupAndClose)
+		s.Once("upgradeError", cleanupAndClose)
+	}
+	if "opening" == s.readyState || "open" == s.readyState {
+		s.readyState = "closing"
+		if len(s.writeBuffer) > 0 {
+			s.Once("drain", func() {
+				if s.upgrading {
+					waitForUpgrade()
+				} else {
+					close()
+				}
+			})
+		} else if s.upgrading {
+			waitForUpgrade()
+		} else {
+			close()
+		}
+	}
+	return s
+}
 
 // Called upon transport error
-func (s *Socket) onError() {}
+func (s *Socket) onError(err error) {
+	// debug("socket error %j", err)
+	SocketState.set(false)
+	s.Emit("error", err)
+	s.onClose("transport error", err)
+}
 
 // Called upon transport close.
-func (s *Socket) onClose() {}
+func (s *Socket) onClose(reason, description) {
+	if "opening" == s.readyState ||
+		"open" == s.readyState ||
+		"closing" == s.readyState {
+		// debug('socket close with reason: "%s"', reason);
+		// clear timers
+		s.clearTimeoutFn(s.pingTimeoutTimer)
+		// stop event from firing again for transport
+		s.transport.removeAllListeners("close")
+		// ensure transport won't stay open
+		s.transport.close()
+		// ignore further transport communication
+		s.transport.removeAllListeners()
+		// removeEventListener("offline", s.offlineEventListener, false);
+		// set ready state
+		s.readyState = "closed"
+		// clear session id
+		s.id = ""
+		// emit close event
+		s.Emit("close", reason, description)
+		// clean buffers after, so users can still
+		// grab the buffers on `close` event
+		s.writeBuffer = s.writeBuffer[:0]
+		s.prevBufferLen = 0
+	}
+}
 
 // Filters upgrades, returning only those matching client transports.
-func (s *Socket) filterUpgrades() {}
+func (s *Socket) filterUpgrades(upgrades []string) *types.Set[string] {
+	filteredUpgrades := *types.NewSet[string]()
+	for _, upgrade := range upgrades {
+		if s.transports.Has(upgrade) {
+			filteredUpgrades.Add(upgrade)
+		}
+	}
+	return filteredUpgrades
+}
