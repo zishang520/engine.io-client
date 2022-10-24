@@ -3,6 +3,7 @@ package engine
 import (
 	"net/url"
 	"sync"
+	"time"
 
 	"github.com/zishang520/engine.io/events"
 	"github.com/zishang520/engine.io/parser"
@@ -45,12 +46,12 @@ type Socket struct {
 	writeBuffer          []*packet.Packet
 	prevBufferLen        int
 	upgrades             *types.Set[string]
-	pingInterval         *utils.Timer
-	pingTimeout          *utils.Timer
+	pingInterval         time.Duration
+	pingTimeout          time.Duration
 	pingTimeoutTimer     *utils.Timer
-	offlineEventListener any
+	offlineEventListener func()
 	upgrading            bool
-	maxPayload           any
+	maxPayload           int64
 	opts                 SocketOptions
 	secure               bool
 	hostname             string
@@ -124,8 +125,8 @@ func NewSocket(uri string, opts SocketOptions) *Socket {
 	// set on handshake
 	s.id = ""
 	s.upgrades = *types.NewSet[string]()
-	s.pingInterval = nil
-	s.pingTimeout = nil
+	// s.pingInterval = nil
+	// s.pingTimeout = nil
 	// set on heartbeat
 	s.pingTimeoutTimer = nil
 
@@ -312,7 +313,7 @@ func (s *Socket) onPacket(msg) {
 		s.Emit("heartbeat")
 		switch msg.Type {
 		case packet.OPEN:
-			s.onHandshake(JSON.parse(msg.Data))
+			s.onHandshake(msg.Data)
 		case packet.PING:
 			s.resetPingTimeout()
 			s.sendPacket("pong")
@@ -331,14 +332,30 @@ func (s *Socket) onPacket(msg) {
 }
 
 // Called upon handshake completion.
-func (s *Socket) onHandshake(data) {
-	s.Emit("handshake", data)
-	s.id = data.sid
-	s.transport.query.Set("sid", data.sid)
-	s.upgrades = s.filterUpgrades(data.upgrades)
-	s.pingInterval = data.pingInterval
-	s.pingTimeout = data.pingTimeout
-	s.maxPayload = data.maxPayload
+func (s *Socket) onHandshake(data io.Reader) {
+	if data == nil {
+		s.onError(errors.New("data must not be nil"))
+		return
+	}
+
+	var msg *HandshakeData
+	if err := json.NewDecoder(data).Decode(&msg); err != nil {
+		s.onError(err)
+		return
+	}
+
+	if msg == nil {
+		s.onError(errors.New("decode error"))
+		return
+	}
+
+	s.Emit("handshake", msg)
+	s.id = msg.Sid
+	s.transport.query.Set("sid", msg.Sid)
+	s.upgrades = s.filterUpgrades(msg.Upgrades)
+	s.pingInterval = msg.PingInterval * time.Millisecond
+	s.pingTimeout = msg.PingTimeout * time.Millisecond
+	s.maxPayload = msg.MaxPayload
 	s.onOpen()
 	// In case open handler closes socket
 	if "closed" == s.readyState {
@@ -349,7 +366,7 @@ func (s *Socket) onHandshake(data) {
 
 // Sets and resets ping timeout timer based on server pings.
 func (s *Socket) resetPingTimeout() {
-	s.clearTimeoutFn(s.pingTimeoutTimer)
+	utils.ClearTimeout(s.pingTimeoutTimer)
 	s.pingTimeoutTimer = utils.SetTimeOut(func() {
 		s.onClose("ping timeout")
 	}, s.pingInterval+s.pingTimeout)
@@ -487,7 +504,7 @@ func (s *Socket) onClose(reason, description) {
 		"closing" == s.readyState {
 		// debug('socket close with reason: "%s"', reason);
 		// clear timers
-		s.clearTimeoutFn(s.pingTimeoutTimer)
+		utils.ClearTimeout(s.pingTimeoutTimer)
 		// stop event from firing again for transport
 		s.transport.removeAllListeners("close")
 		// ensure transport won't stay open
