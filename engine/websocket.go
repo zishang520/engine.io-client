@@ -1,7 +1,9 @@
 package engine
 
 import (
+	"net/http"
 	"net/url"
+	"time"
 
 	"github.com/gorilla/websocket"
 )
@@ -32,7 +34,12 @@ func (w *WS) Name() string {
 
 // Opens socket.
 func (w *WS) _doOpen() {
-	c, _, err := websocket.DefaultDialer.Dial(w.uri(), w.opts.extraHeaders)
+	&websocket.Dialer{
+		Proxy:            http.ProxyFromEnvironment,
+		HandshakeTimeout: 45 * time.Second,
+		Subprotocols:     w.opts.Protocols,
+	}
+	c, _, err := websocket.DefaultDialer.Dial(w.uri(), w.opts.ExtraHeaders)
 	if err != nil {
 		w.Emit("error", err)
 		return

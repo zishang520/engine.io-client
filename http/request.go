@@ -21,12 +21,13 @@ type Response struct {
 }
 
 type Options struct {
-	Method   string
-	Headers  map[string]string
-	Compress bool
-	Timeout  time.Duration
-	Body     io.Reader
-	Jar      http.CookieJar
+	Method          string
+	Headers         map[string]string
+	Compress        bool
+	Timeout         time.Duration
+	Body            io.Reader
+	Jar             http.CookieJar
+	TLSClientConfig *tls.Config
 }
 
 type Request struct {
@@ -45,8 +46,15 @@ func NewRequest(uri string, opts *Options) (*Response, error) {
 }
 
 func (r *Request) create() {
-	client := &http.Client{
-		Jar: r.options.Jar,
+	client := &http.Client{}
+	if r.options.Jar != nil {
+		client.Jar = r.options.Jar
+	}
+	if r.options.TLSClientConfig != nil {
+		client.Transport = &http.Transport{
+			Proxy:           http.ProxyFromEnvironment,
+			TLSClientConfig: r.options.TLSClientConfig,
+		}
 	}
 	if r.options.Timeout > 0 {
 		client.Timeout = r.options.Timeout

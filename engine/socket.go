@@ -2,7 +2,10 @@ package engine
 
 import (
 	"net/url"
+	"os"
+	"os/signal"
 	"sync"
+	"syscall"
 	"time"
 
 	"github.com/zishang520/engine.io/events"
@@ -130,6 +133,23 @@ func NewSocket(uri string, opts SocketOptions) *Socket {
 	// set on heartbeat
 	s.pingTimeoutTimer = nil
 
+	if s.opts.CloseOnBeforeunload {
+		signalC := make(chan os.Signal)
+		signal.Notify(signalC, os.Interrupt, syscall.SIGTERM)
+		go func() {
+			for s := range signalC {
+				switch s {
+				case os.Interrupt, syscall.SIGTERM:
+					if s.transport != nil {
+						// silently close the transport
+						s.transport.RemoveAllListeners()
+						s.transport.Close()
+					}
+					return
+				}
+			}
+		}()
+	}
 	s.open()
 }
 

@@ -192,6 +192,11 @@ func (p *Polling) uri() string {
 // Creates a request.
 func (p *Polling) request(opts *_http.Options) (*_http.Response, error) {
 	// Object.assign(opts, { xd: p.xd, xs: p.xs }, p.opts);
+	if opts == nil {
+		opts = &_http.Options{}
+	}
+	opts.Timeout = p.opts.RequestTimeout
+	opts.TLSClientConfig = p.opts.TLSClientConfig
 	return NewRequest(p.uri(), opts)
 }
 
