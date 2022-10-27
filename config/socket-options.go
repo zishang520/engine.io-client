@@ -15,16 +15,16 @@ type PerMessageDeflate struct {
 type SocketOptions struct {
 
 	// The host that we're connecting to. Set from the URI passed when connecting
-	Host string
+	Host *string
 
 	// The hostname for our connection. Set from the URI passed when connecting
-	Hostname string
+	Hostname *string
 
 	// If this is a secure connection. Set from the URI passed when connecting
-	Secure bool
+	Secure *bool
 
 	// The port for our connection. Set from the URI passed when connecting
-	Port string
+	Port *string
 
 	// Any query parameters in our uri. Set from the URI passed when connecting
 	Query *utils.ParameterBag
@@ -32,22 +32,22 @@ type SocketOptions struct {
 	// Whether the client should try to upgrade the transport from
 	// long-polling to something better.
 	// @default true
-	Upgrade bool
+	Upgrade *bool
 
 	// Forces base 64 encoding for polling transport even when XHR2
 	// responseType is available and WebSocket even if the used standard
 	// supports binary.
-	ForceBase64 bool
+	ForceBase64 *bool
 
 	// The param name to use as our timestamp key
 	// @default 't'
-	TimestampParam string
+	TimestampParam *string
 
 	// Whether to add the timestamp with each transport request. Note  this
 	// is ignored if the browser is IE or Android, in which case requests
 	// are always stamped
 	// @default false
-	TimestampRequests bool
+	TimestampRequests *bool
 
 	// A list of transports to try (in order). Engine.io always attempts to
 	// connect directly with the first one, provided the feature detection test
@@ -62,13 +62,13 @@ type SocketOptions struct {
 	// only when using SSL/TLS connections, or if you know that your network does
 	// not block websockets.
 	// @default false
-	RememberUpgrade bool
+	RememberUpgrade *bool
 
 	// Are we only interested in transports that support binary?
-	OnlyBinaryUpgrades bool
+	OnlyBinaryUpgrades *bool
 
 	// Timeout for xhr-polling requests in milliseconds (0) (only for polling transport)
-	RequestTimeout time.Duration
+	RequestTimeout *time.Duration
 
 	// Transport options for Node.js client (headers etc)
 	TransportOptions map[string]*SocketOptions
@@ -84,7 +84,7 @@ type SocketOptions struct {
 
 	// Whether to automatically close the connection whenever the beforeunload event is received.
 	// @default true
-	CloseOnBeforeunload bool
+	CloseOnBeforeunload *bool
 
 	// parameters of the WebSocket permessage-deflate extension (see ws module api docs). Set to false to disable.
 	// @default nil
@@ -93,7 +93,7 @@ type SocketOptions struct {
 	// The path to get our client file from, in the case of the server
 	// serving it
 	// @default '/engine.io'
-	Path string
+	Path *string
 
 	// Either a single protocol string or an array of protocol strings. These strings are used to indicate sub-protocols,
 	// so that a single server can implement multiple WebSocket sub-protocols (for example, you might want one server to

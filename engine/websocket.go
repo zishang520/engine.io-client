@@ -34,12 +34,12 @@ func (w *WS) Name() string {
 
 // Opens socket.
 func (w *WS) _doOpen() {
-	&websocket.Dialer{
+	dialer := &websocket.Dialer{
 		Proxy:            http.ProxyFromEnvironment,
 		HandshakeTimeout: 45 * time.Second,
 		Subprotocols:     w.opts.Protocols,
 	}
-	c, _, err := websocket.DefaultDialer.Dial(w.uri(), w.opts.ExtraHeaders)
+	c, _, err := dialer.Dial(w.uri(), w.opts.ExtraHeaders)
 	if err != nil {
 		w.Emit("error", err)
 		return
