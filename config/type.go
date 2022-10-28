@@ -53,9 +53,9 @@ type SocketOptionsInterface interface {
 	GetRawRequestTimeout() *time.Duration
 	SetRequestTimeout(time.Duration)
 
-	TransportOptions() map[string]*SocketOptions
-	GetRawTransportOptions() map[string]*SocketOptions
-	SetTransportOptions(map[string]*SocketOptions)
+	TransportOptions() map[string]SocketOptionsInterface
+	GetRawTransportOptions() map[string]SocketOptionsInterface
+	SetTransportOptions(map[string]SocketOptionsInterface)
 
 	TLSClientConfig() *tls.Config
 	GetRawTLSClientConfig() *tls.Config

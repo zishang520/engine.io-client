@@ -71,29 +71,29 @@ func NewSocket(uri string, opts SocketOptions) *Socket {
 
 	if uri != "" {
 		_url := url.Parse(uri)
-		opts.hostname = _url.Hostname()
-		opts.secure = _url.Scheme == "https" || _url.Scheme == "wss"
-		opts.port = _url.Port()
+		opts.SetHostname(_url.Hostname())
+		opts.SetSecure(_url.Scheme == "https" || _url.Scheme == "wss")
+		opts.SetPort(_url.Port())
 		if _url.RawQuery != "" {
-			opts.query = _url.Query()
+			opts.SetQuery(utils.NewParameterBag(_url.Query()))
 		}
-	} else if opts.host != "" {
-		_url := url.Parse(opts.host)
-		opts.hostname = _url.Hostname()
+	} else if opts.Host() != "" {
+		_url := url.Parse(opts.Host())
+		opts.SetHostname(_url.Hostname())
 	}
 
-	s.secure = opts.secure
+	s.secure = opts.Secure()
 
-	if opts.hostname != "" && opts.port == "" {
+	if opts.Hostname() != "" && opts.Port() == "" {
 		// if no port is specified manually, use the protocol default
-		opts.port = "80"
+		opts.SetPort("80")
 		if s.secure {
-			opts.port = "443"
+			opts.SetPort("443")
 		}
 	}
 
-	s.hostname = opts.hostname
-	s.port = opts.port
+	s.hostname = opts.Hostname()
+	s.port = opts.Port()
 	if s.port == "" {
 		if s.secure {
 			s.port = "443"
@@ -101,39 +101,20 @@ func NewSocket(uri string, opts SocketOptions) *Socket {
 			s.port = "80"
 		}
 	}
-	if opts.transports != nil {
-		s.transports = opts.transports
+	if opts.Transports() != nil {
+		s.transports = opts.Transports()
 	} else {
 		s.transports = types.NewSet("polling", "websocket")
 	}
 	s.readyState = ""
 	s.writeBuffer = []*packet.Packet{}
 	s.prevBufferLen = 0
-	//  s.opts = Object.assign({
-	//     path: "/engine.io",
-	//     agent: false,
-	//     withCredentials: false,
-	//     upgrade: true,
-	//     timestampParam: "t",
-	//     rememberUpgrade: false,
-	//     rejectUnauthorized: true,
-	//     perMessageDeflate: {
-	//         threshold: 1024
-	//     },
-	//     transportOptions: {},
-	//     closeOnBeforeunload: true
-	// }, opts);
-	s.opts.path = strings.TrimRight(s.opts.path, "/") + "/"
+	_opts = config.DefaultSocketOptions()
+	_opts.SetPerMessageDeflate(&config.PerMessageDeflate{1024})
+	s.opts = _opts.Assign(opts)
+	s.opts.SetPath(strings.TrimRight(s.opts.Path(), "/") + "/")
 
-	// set on handshake
-	s.id = ""
-	s.upgrades = *types.NewSet[string]()
-	// s.pingInterval = nil
-	// s.pingTimeout = nil
-	// set on heartbeat
-	s.pingTimeoutTimer = nil
-
-	if s.opts.CloseOnBeforeunload {
+	if s.opts.CloseOnBeforeunload() {
 		signalC := make(chan os.Signal)
 		signal.Notify(signalC, os.Interrupt, syscall.SIGTERM)
 		go func() {
@@ -149,13 +130,14 @@ func NewSocket(uri string, opts SocketOptions) *Socket {
 				}
 			}
 		}()
+		// network
 	}
 	s.open()
 }
 
 // Creates transport of the given type.
 func (s *Socket) createTransport(name string) {
-	query := utils.NewParameterBag(s.opts.query.All())
+	query := utils.NewParameterBag(s.opts.Query().All())
 	// append engine.io protocol identifier
 	query.Set("EIO", parser.Parserv4().Protocol())
 	// transport name
@@ -164,7 +146,8 @@ func (s *Socket) createTransport(name string) {
 	if s.id != "" {
 		query.Set("sid", s.id)
 	}
-	// const opts = Object.assign({}, s.opts.transportOptions[name], s.opts, {
+	// config.DefaultSocketOptions().Assign(s.opts.TransportOptions()[name])
+	// const opts = Object.assign({}, s.opts.TransportOptions()[name], s.opts, {
 	//     query,
 	//     socket: s,
 	//     hostname: s.hostname,
@@ -177,7 +160,7 @@ func (s *Socket) createTransport(name string) {
 // Initializes transport to use and starts probe.
 func (s *Socket) open() {
 	name := ""
-	if s.opts.rememberUpgrade && SocketState.get() && s.transports.Has("websocket") {
+	if s.opts.RememberUpgrade() && SocketState.get() && s.transports.Has("websocket") {
 		name = "websocket"
 	} else if s.transports.Len() == 0 {
 		go s.Emit("error", "No transports available")
@@ -315,7 +298,7 @@ func (s *Socket) onOpen() {
 	s.flush()
 	// we check for `readyState` in case an `open`
 	// listener already closed the socket
-	if "open" == s.readyState && s.opts.upgrade && s.transport.pause {
+	if "open" == s.readyState && s.opts.Upgrade() && s.transport.pause {
 		for _, upgrade := range s.upgrades.Key() {
 			s.probe(upgrade)
 		}
@@ -390,7 +373,7 @@ func (s *Socket) resetPingTimeout() {
 	s.pingTimeoutTimer = utils.SetTimeOut(func() {
 		s.onClose("ping timeout")
 	}, s.pingInterval+s.pingTimeout)
-	// if s.opts.autoUnref {
+	// if s.opts.AutoUnref() {
 	// 	s.pingTimeoutTimer.Unref()
 	// }
 }

@@ -71,7 +71,7 @@ type SocketOptions struct {
 	requestTimeout *time.Duration
 
 	// Transport options
-	transportOptions map[string]*SocketOptions
+	transportOptions map[string]SocketOptionsInterface
 
 	// TLSClientConfig specifies the TLS configuration to use with tls.Client.
 	// If nil, the default configuration is used.
@@ -354,13 +354,13 @@ func (s *SocketOptions) SetRequestTimeout(requestTimeout time.Duration) {
 	s.requestTimeout = &requestTimeout
 }
 
-func (s *SocketOptions) TransportOptions() map[string]*SocketOptions {
+func (s *SocketOptions) TransportOptions() map[string]SocketOptionsInterface {
 	return s.transportOptions
 }
-func (s *SocketOptions) GetRawTransportOptions() map[string]*SocketOptions {
+func (s *SocketOptions) GetRawTransportOptions() map[string]SocketOptionsInterface {
 	return s.transportOptions
 }
-func (s *SocketOptions) SetTransportOptions(transportOptions map[string]*SocketOptions) {
+func (s *SocketOptions) SetTransportOptions(transportOptions map[string]SocketOptionsInterface) {
 	s.transportOptions = transportOptions
 }
 
