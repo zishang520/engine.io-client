@@ -4,27 +4,30 @@ import (
 	"net/url"
 	"sync"
 
+	"github.com/zishang520/engine.io-client/config"
 	"github.com/zishang520/engine.io-client/errors"
 	"github.com/zishang520/engine.io/events"
+	"github.com/zishang520/engine.io/log"
 	"github.com/zishang520/engine.io/packet"
 	"github.com/zishang520/engine.io/parser"
 	"github.com/zishang520/engine.io/utils"
 )
 
+var client_log = log.NewLog("engine.io-client:transport")
+
 type CloseDetails struct {
 	Description string
-	Context     any
+	Error       error
 }
 
 type Transport struct {
 	events.EventEmitter
 
-	opts           SocketOptions
+	opts           config.SocketOptionsInterface
 	supportsBinary bool
 	query          *utils.ParameterBag
 	_readyState    string
 	_writable      bool
-	socket         any
 
 	mu_readyState sync.RWMutex
 	mu_writable   sync.RWMutex
@@ -35,15 +38,14 @@ type Transport struct {
 }
 
 // Transport abstract constructor.
-func NewTransport(opts SocketOptions) {
+func NewTransport(opts config.SocketOptionsInterface) {
 	t := &Transport{}
 
 	t.EventEmitter = events.New()
 	t._writable = false
 	t.opts = opts
-	t.query = opts.query
+	t.query = opts.Query()
 	t._readyState = ""
-	t.socket = opts.socket
 
 	t.doOpen = t._doOpen
 	t.doClose = t._doClose
@@ -77,8 +79,8 @@ func (t *Transport) writable() bool {
 }
 
 // Emits an error.
-func (t *Transport) onError(reason string, description error, context any) {
-	t.Emit("error", errors.NewTransportError(reason, description, context).Err())
+func (t *Transport) onError(reason string, description error) {
+	t.Emit("error", errors.NewTransportError(reason, description).Err())
 }
 
 // Opens the transport.
@@ -104,6 +106,7 @@ func (t *Transport) Send(packets []*packet.Packet) {
 		t.write(packets)
 	} else {
 		// this might happen if the transport was silently closed in the beforeunload event handler
+		client_log.Debug("transport is not open, discarding packets")
 	}
 }
 
@@ -116,7 +119,7 @@ func (t *Transport) onOpen() {
 
 // Called with data.
 func (t *Transport) onData(data RawData) {
-	p, _ := parser.Parserv4().DecodePacket(data, t.socket.binaryType)
+	p, _ := parser.Parserv4().DecodePacket(data)
 	t.onPacket(packet)
 }
 

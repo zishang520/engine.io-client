@@ -3,23 +3,21 @@ package errors
 type TransportError struct {
 	Message     string
 	Description error
-	Context     any
-	Type        string //"TransportError"
+	Type        string
 }
 
-func NewTransportError(reason string, description error, context any) *Error {
+func NewTransportError(reason string, description error) *TransportError {
 	return &TransportError{
 		Message:     reason,
 		Description: description,
-		Context:     context,
 		Type:        "TransportError",
 	}
 }
 
-func (e *Error) Err() error {
+func (e *TransportError) Err() error {
 	return e
 }
 
-func (e *Error) Error() string {
+func (e *TransportError) Error() string {
 	return e.Message
 }

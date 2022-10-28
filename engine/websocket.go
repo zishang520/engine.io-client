@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"github.com/gorilla/websocket"
+	"github.com/zishang520/engine.io-client/config"
 )
 
 type WS struct {
@@ -16,7 +17,7 @@ type WS struct {
 }
 
 // WebSocket transport constructor.
-func NewWS(opts SocketOptions) {
+func NewWS(opts config.SocketOptionsInterface) {
 	p := &WS{}
 	p.Transport = NewTransport(opts)
 	p.supportsBinary = !opts.forceBase64
@@ -66,9 +67,9 @@ func (w *WS) addEventListeners() {
 			mt, message, err := ws.NextReader()
 			if err != nil {
 				if websocket.IsUnexpectedCloseError(err) {
-					w.onClose(&CloseDetails{Description: "websocket connection closed", Context: err})
+					w.onClose(&CloseDetails{Description: "websocket connection closed", Error: err})
 				} else {
-					w.onError("websocket error", err, nil)
+					w.onError("websocket error", err)
 				}
 				break
 			}
@@ -76,14 +77,14 @@ func (w *WS) addEventListeners() {
 			case websocket.BinaryMessage:
 				read := types.NewBytesBuffer(nil)
 				if _, err := read.ReadFrom(message); err != nil {
-					w.onError("websocket error", err, nil)
+					w.onError("websocket error", err)
 				} else {
 					w.onData(read)
 				}
 			case websocket.TextMessage:
 				read := types.NewStringBuffer(nil)
 				if _, err := read.ReadFrom(message); err != nil {
-					w.onError("websocket error", err, nil)
+					w.onError("websocket error", err)
 				} else {
 					w.onData(read)
 				}

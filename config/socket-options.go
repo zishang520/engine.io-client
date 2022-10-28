@@ -102,6 +102,11 @@ type SocketOptions struct {
 	protocols []string
 }
 
+func DefaultSocketOptions() *SocketOptions {
+	s := &SocketOptions{}
+	return s
+}
+
 func (s *SocketOptions) Assign(data SocketOptionsInterface) SocketOptionsInterface {
 	if data == nil {
 		return s

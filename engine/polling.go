@@ -6,6 +6,7 @@ import (
 	"net/url"
 	"sync"
 
+	"github.com/zishang520/engine.io-client/config"
 	_http "github.com/zishang520/engine.io-client/http"
 	"github.com/zishang520/engine.io/events"
 	"github.com/zishang520/engine.io/packet"
@@ -19,7 +20,7 @@ type Polling struct {
 }
 
 // XHR Polling constructor.
-func NewPolling(opts SocketOptions) {
+func NewPolling(opts config.SocketOptionsInterface) {
 	p := &Polling{}
 	p.Transport = NewTransport(opts)
 	p._polling = false
@@ -112,7 +113,7 @@ func (p *Polling) _onPacket(packetData *packet.Packet) {
 // Overloads onData to detect payloads.
 func (p *Polling) onData(data types.BufferInterface) {
 	// decode payload
-	for _, packetData := range parser.Parserv4().DecodePayload(data, p.socket.binaryType) {
+	for _, packetData := range parser.Parserv4().DecodePayload(data) {
 		p._onPacket(packetData)
 	}
 	// if an event did not trigger closing
@@ -207,10 +208,10 @@ func (p *Polling) doWrite(data types.BufferInterface, fn func()) {
 		Body:   data,
 	})
 	if err != nil {
-		p.onError("xhr post error", err, nil)
+		p.onError("xhr post error", err)
 	}
 	if res.StatusCode != http.StatusOK {
-		p.onError("xhr post error", errors.New(res.StatusCode), nil)
+		p.onError("xhr post error", errors.New(res.StatusCode))
 	}
 	fn()
 }
@@ -219,10 +220,10 @@ func (p *Polling) doWrite(data types.BufferInterface, fn func()) {
 func (p *Polling) doPoll() {
 	res, err := p.request(nil)
 	if err != nil {
-		p.onError("xhr poll error", err, nil)
+		p.onError("xhr poll error", err)
 	}
 	if res.StatusCode != http.StatusOK {
-		p.onError("xhr poll error", errors.New(res.StatusCode), nil)
+		p.onError("xhr poll error", errors.New(res.StatusCode))
 	}
 	t.onData(res.BodyBuffer)
 }
