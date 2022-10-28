@@ -8,88 +8,6 @@ import (
 	"github.com/zishang520/engine.io/utils"
 )
 
-type SocketOptionsInterface interface {
-	Host() string
-	GetRawHost() *string
-	SetHost(string)
-
-	Hostname() string
-	GetRawHostname() *string
-	SetHostname(string)
-
-	Secure() bool
-	GetRawSecure() *bool
-	SetSecure(bool)
-
-	Port() string
-	GetRawPort() *string
-	SetPort(string)
-
-	Query() *utils.ParameterBag
-	GetRawQuery() *utils.ParameterBag
-	SetQuery(*utils.ParameterBag)
-
-	Upgrade() bool
-	GetRawUpgrade() *bool
-	SetUpgrade(bool)
-
-	ForceBase64() bool
-	GetRawForceBase64() *bool
-	SetForceBase64(bool)
-
-	TimestampParam() string
-	GetRawTimestampParam() *string
-	SetTimestampParam(string)
-
-	TimestampRequests() bool
-	GetRawTimestampRequests() *bool
-	SetTimestampRequests(bool)
-
-	Transports() *types.Set[string]
-	GetRawTransports() *types.Set[string]
-	SetTransports(*types.Set[string])
-
-	RememberUpgrade() bool
-	GetRawRememberUpgrade() *bool
-	SetRememberUpgrade(bool)
-
-	OnlyBinaryUpgrades() bool
-	GetRawOnlyBinaryUpgrades() *bool
-	SetOnlyBinaryUpgrades(bool)
-
-	RequestTimeout() time.Duration
-	GetRawRequestTimeout() *time.Duration
-	SetRequestTimeout(time.Duration)
-
-	TransportOptions() map[string]*SocketOptions
-	GetRawTransportOptions() map[string]*SocketOptions
-	SetTransportOptions(map[string]*SocketOptions)
-
-	TLSClientConfig() *tls.Config
-	GetRawTLSClientConfig() *tls.Config
-	SetTLSClientConfig(*tls.Config)
-
-	ExtraHeaders() map[string]string
-	GetRawExtraHeaders() map[string]string
-	SetExtraHeaders(map[string]string)
-
-	CloseOnBeforeunload() bool
-	GetRawCloseOnBeforeunload() *bool
-	SetCloseOnBeforeunload(bool)
-
-	PerMessageDeflate() *PerMessageDeflate
-	GetRawPerMessageDeflate() *PerMessageDeflate
-	SetPerMessageDeflate(*PerMessageDeflate)
-
-	Path() string
-	GetRawPath() *string
-	SetPath(string)
-
-	Protocols() []string
-	GetRawProtocols() []string
-	SetProtocols([]string)
-}
-
 type PerMessageDeflate struct {
 	Threshold int
 }
@@ -97,45 +15,45 @@ type PerMessageDeflate struct {
 type SocketOptions struct {
 
 	// The host that we're connecting to. Set from the URI passed when connecting
-	Host *string
+	host *string
 
 	// The hostname for our connection. Set from the URI passed when connecting
-	Hostname *string
+	hostname *string
 
 	// If this is a secure connection. Set from the URI passed when connecting
-	Secure *bool
+	secure *bool
 
 	// The port for our connection. Set from the URI passed when connecting
-	Port *string
+	port *string
 
 	// Any query parameters in our uri. Set from the URI passed when connecting
-	Query *utils.ParameterBag
+	query *utils.ParameterBag
 
 	// Whether the client should try to upgrade the transport from
 	// long-polling to something better.
 	// @default true
-	Upgrade *bool
+	upgrade *bool
 
 	// Forces base 64 encoding for polling transport even when XHR2
 	// responseType is available and WebSocket even if the used standard
 	// supports binary.
-	ForceBase64 *bool
+	forceBase64 *bool
 
 	// The param name to use as our timestamp key
 	// @default 't'
-	TimestampParam *string
+	timestampParam *string
 
 	// Whether to add the timestamp with each transport request. Note  this
 	// is ignored if the browser is IE or Android, in which case requests
 	// are always stamped
 	// @default false
-	TimestampRequests *bool
+	timestampRequests *bool
 
 	// A list of transports to try (in order). Engine.io always attempts to
 	// connect directly with the first one, provided the feature detection test
 	// for it passes.
 	// @default types.NewSet("polling", "websocket")
-	Transports *types.Set[string]
+	transports *types.Set[string]
 
 	// If true and if the previous websocket connection to the server succeeded,
 	// the connection attempt will bypass the normal upgrade process and will
@@ -144,44 +62,117 @@ type SocketOptions struct {
 	// only when using SSL/TLS connections, or if you know that your network does
 	// not block websockets.
 	// @default false
-	RememberUpgrade *bool
+	rememberUpgrade *bool
 
 	// Are we only interested in transports that support binary?
-	OnlyBinaryUpgrades *bool
+	onlyBinaryUpgrades *bool
 
 	// Timeout for xhr-polling requests in milliseconds (0) (only for polling transport)
-	RequestTimeout *time.Duration
+	requestTimeout *time.Duration
 
-	// Transport options for Node.js client (headers etc)
-	TransportOptions map[string]*SocketOptions
+	// Transport options
+	transportOptions map[string]*SocketOptions
 
 	// TLSClientConfig specifies the TLS configuration to use with tls.Client.
 	// If nil, the default configuration is used.
 	// is done there and TLSClientConfig is ignored.
-	TLSClientConfig *tls.Config
+	tLSClientConfig *tls.Config
 
 	// Headers that will be passed for each request to the server (via xhr-polling and via websockets).
 	// These values then can be used during handshake or for special proxies.
-	ExtraHeaders map[string]string
+	extraHeaders map[string]string
 
 	// Whether to automatically close the connection whenever the beforeunload event is received.
 	// @default true
-	CloseOnBeforeunload *bool
+	closeOnBeforeunload *bool
 
 	// parameters of the WebSocket permessage-deflate extension (see ws module api docs). Set to false to disable.
 	// @default nil
-	PerMessageDeflate *PerMessageDeflate
+	perMessageDeflate *PerMessageDeflate
 
 	// The path to get our client file from, in the case of the server
 	// serving it
 	// @default '/engine.io'
-	Path *string
+	path *string
 
 	// Either a single protocol string or an array of protocol strings. These strings are used to indicate sub-protocols,
 	// so that a single server can implement multiple WebSocket sub-protocols (for example, you might want one server to
 	// be able to handle different types of interactions depending on the specified protocol)
 	// @default []string
-	Protocols []string
+	protocols []string
+}
+
+func (s *SocketOptions) Assign(data SocketOptionsInterface) SocketOptionsInterface {
+	if data == nil {
+		return s
+	}
+
+	if s.GetRawPingTimeout() == nil {
+		s.SetPingTimeout(data.PingTimeout())
+	}
+
+	if s.GetRawHost() == nil {
+		s.SetHost(data.Host())
+	}
+	if s.GetRawHostname() == nil {
+		s.SetHostname(data.Hostname())
+	}
+	if s.GetRawSecure() == nil {
+		s.SetSecure(data.Secure())
+	}
+	if s.GetRawPort() == nil {
+		s.SetPort(data.Port())
+	}
+	if s.GetRawQuery() == nil {
+		s.SetQuery(data.Query())
+	}
+	if s.GetRawUpgrade() == nil {
+		s.SetUpgrade(data.Upgrade())
+	}
+	if s.GetRawForceBase64() == nil {
+		s.SetForceBase64(data.ForceBase64())
+	}
+	if s.GetRawTimestampParam() == nil {
+		s.SetTimestampParam(data.TimestampParam())
+	}
+	if s.GetRawTimestampRequests() == nil {
+		s.SetTimestampRequests(data.TimestampRequests())
+	}
+	if s.GetRawTransports() == nil {
+		s.SetTransports(data.Transports())
+	}
+	if s.GetRawRememberUpgrade() == nil {
+		s.SetRememberUpgrade(data.RememberUpgrade())
+	}
+	if s.GetRawOnlyBinaryUpgrades() == nil {
+		s.SetOnlyBinaryUpgrades(data.OnlyBinaryUpgrades())
+	}
+	if s.GetRawRequestTimeout() == nil {
+		s.SetRequestTimeout(data.RequestTimeout())
+	}
+	if s.GetRawTransportOptions() == nil {
+		s.SetTransportOptions(data.TransportOptions())
+	}
+	if s.GetRawTLSClientConfig() == nil {
+		s.SetTLSClientConfig(data.TLSClientConfig())
+	}
+	if s.GetRawExtraHeaders() == nil {
+		s.SetExtraHeaders(data.ExtraHeaders())
+	}
+	if s.GetRawCloseOnBeforeunload() == nil {
+		s.SetCloseOnBeforeunload(data.CloseOnBeforeunload())
+	}
+	if s.GetRawPerMessageDeflate() == nil {
+		s.SetPerMessageDeflate(data.PerMessageDeflate())
+	}
+	if s.GetRawPath() == nil {
+		s.SetPath(data.Path())
+	}
+	if s.GetRawProtocols() == nil {
+		s.SetProtocols(data.Protocols())
+	}
+
+	return s
 }
 
 func (s *SocketOptions) Host() string {
@@ -191,81 +182,251 @@ func (s *SocketOptions) Host() string {
 
 	return *s.host
 }
-func (s *SocketOptions) GetRawHost() *string {}
-func (s *SocketOptions) SetHost(string)      {}
+func (s *SocketOptions) GetRawHost() *string {
+	return s.host
+}
+func (s *SocketOptions) SetHost(host string) {
+	s.host = &host
+}
 
-func (s *SocketOptions) Hostname() string        {}
-func (s *SocketOptions) GetRawHostname() *string {}
-func (s *SocketOptions) SetHostname(string)      {}
+func (s *SocketOptions) Hostname() string {
+	if s.hostname == nil {
+		return ""
+	}
 
-func (s *SocketOptions) Secure() bool        {}
-func (s *SocketOptions) GetRawSecure() *bool {}
-func (s *SocketOptions) SetSecure(bool)      {}
+	return *s.hostname
+}
+func (s *SocketOptions) GetRawHostname() *string {
+	return s.hostname
+}
+func (s *SocketOptions) SetHostname(hostname string) {
+	s.hostname = &hostname
+}
 
-func (s *SocketOptions) Port() string        {}
-func (s *SocketOptions) GetRawPort() *string {}
-func (s *SocketOptions) SetPort(string)      {}
+func (s *SocketOptions) Secure() bool {
+	if s.secure == nil {
+		return false
+	}
 
-func (s *SocketOptions) Query() *utils.ParameterBag       {}
-func (s *SocketOptions) GetRawQuery() *utils.ParameterBag {}
-func (s *SocketOptions) SetQuery(*utils.ParameterBag)     {}
+	return *s.secure
+}
+func (s *SocketOptions) GetRawSecure() *bool {
+	return s.secure
+}
+func (s *SocketOptions) SetSecure(secure bool) {
+	s.secure = &secure
+}
 
-func (s *SocketOptions) Upgrade() bool        {}
-func (s *SocketOptions) GetRawUpgrade() *bool {}
-func (s *SocketOptions) SetUpgrade(bool)      {}
+func (s *SocketOptions) Port() string {
+	if s.port == nil {
+		return ""
+	}
 
-func (s *SocketOptions) ForceBase64() bool        {}
-func (s *SocketOptions) GetRawForceBase64() *bool {}
-func (s *SocketOptions) SetForceBase64(bool)      {}
+	return *s.port
+}
+func (s *SocketOptions) GetRawPort() *string {
+	return s.port
+}
+func (s *SocketOptions) SetPort(port string) {
+	s.port = &port
+}
 
-func (s *SocketOptions) TimestampParam() string        {}
-func (s *SocketOptions) GetRawTimestampParam() *string {}
-func (s *SocketOptions) SetTimestampParam(string)      {}
+func (s *SocketOptions) Query() *utils.ParameterBag {
+	return s.query
+}
+func (s *SocketOptions) GetRawQuery() *utils.ParameterBag {
+	return s.query
+}
+func (s *SocketOptions) SetQuery(query *utils.ParameterBag) {
+	s.query = query
+}
 
-func (s *SocketOptions) TimestampRequests() bool        {}
-func (s *SocketOptions) GetRawTimestampRequests() *bool {}
-func (s *SocketOptions) SetTimestampRequests(bool)      {}
+func (s *SocketOptions) Upgrade() bool {
+	if s.upgrade == nil {
+		return true
+	}
 
-func (s *SocketOptions) Transports() *types.Set[string]       {}
-func (s *SocketOptions) GetRawTransports() *types.Set[string] {}
-func (s *SocketOptions) SetTransports(*types.Set[string])     {}
+	return *s.upgrade
+}
+func (s *SocketOptions) GetRawUpgrade() *bool {
+	return s.upgrade
+}
+func (s *SocketOptions) SetUpgrade(upgrade bool) {
+	s.upgrade = &upgrade
+}
 
-func (s *SocketOptions) RememberUpgrade() bool        {}
-func (s *SocketOptions) GetRawRememberUpgrade() *bool {}
-func (s *SocketOptions) SetRememberUpgrade(bool)      {}
+func (s *SocketOptions) ForceBase64() bool {
+	if s.forceBase64 == nil {
+		return false
+	}
 
-func (s *SocketOptions) OnlyBinaryUpgrades() bool        {}
-func (s *SocketOptions) GetRawOnlyBinaryUpgrades() *bool {}
-func (s *SocketOptions) SetOnlyBinaryUpgrades(bool)      {}
+	return *s.forceBase64
+}
+func (s *SocketOptions) GetRawForceBase64() *bool {
+	return s.forceBase64
+}
+func (s *SocketOptions) SetForceBase64(forceBase64 bool) {
+	s.forceBase64 = &forceBase64
+}
 
-func (s *SocketOptions) RequestTimeout() time.Duration        {}
-func (s *SocketOptions) GetRawRequestTimeout() *time.Duration {}
-func (s *SocketOptions) SetRequestTimeout(time.Duration)      {}
+func (s *SocketOptions) TimestampParam() string {
+	if s.timestampParam == nil {
+		return "t"
+	}
 
-func (s *SocketOptions) TransportOptions() map[string]*SocketOptions       {}
-func (s *SocketOptions) GetRawTransportOptions() map[string]*SocketOptions {}
-func (s *SocketOptions) SetTransportOptions(map[string]*SocketOptions)     {}
+	return *s.timestampParam
+}
+func (s *SocketOptions) GetRawTimestampParam() *string {
+	return s.timestampParam
+}
+func (s *SocketOptions) SetTimestampParam(timestampParam string) {
+	s.timestampParam = &timestampParam
+}
 
-func (s *SocketOptions) TLSClientConfig() *tls.Config       {}
-func (s *SocketOptions) GetRawTLSClientConfig() *tls.Config {}
-func (s *SocketOptions) SetTLSClientConfig(*tls.Config)     {}
+func (s *SocketOptions) TimestampRequests() bool {
+	if s.timestampRequests == nil {
+		return false
+	}
 
-func (s *SocketOptions) ExtraHeaders() map[string]string       {}
-func (s *SocketOptions) GetRawExtraHeaders() map[string]string {}
-func (s *SocketOptions) SetExtraHeaders(map[string]string)     {}
+	return *s.timestampRequests
+}
+func (s *SocketOptions) GetRawTimestampRequests() *bool {
+	return s.timestampRequests
+}
+func (s *SocketOptions) SetTimestampRequests(timestampRequests bool) {
+	s.timestampRequests = &timestampRequests
+}
 
-func (s *SocketOptions) CloseOnBeforeunload() bool        {}
-func (s *SocketOptions) GetRawCloseOnBeforeunload() *bool {}
-func (s *SocketOptions) SetCloseOnBeforeunload(bool)      {}
+func (s *SocketOptions) Transports() *types.Set[string] {
+	if s.transports == nil {
+		return types.NewSet("polling", "websocket")
+	}
 
-func (s *SocketOptions) PerMessageDeflate() *PerMessageDeflate       {}
-func (s *SocketOptions) GetRawPerMessageDeflate() *PerMessageDeflate {}
-func (s *SocketOptions) SetPerMessageDeflate(*PerMessageDeflate)     {}
+	return s.transports
+}
+func (s *SocketOptions) GetRawTransports() *types.Set[string] {
+	return s.transports
+}
+func (s *SocketOptions) SetTransports(transports *types.Set[string]) {
+	s.transports = transports
+}
 
-func (s *SocketOptions) Path() string        {}
-func (s *SocketOptions) GetRawPath() *string {}
-func (s *SocketOptions) SetPath(string)      {}
+func (s *SocketOptions) RememberUpgrade() bool {
+	if s.rememberUpgrade == nil {
+		return false
+	}
 
-func (s *SocketOptions) Protocols() []string       {}
-func (s *SocketOptions) GetRawProtocols() []string {}
-func (s *SocketOptions) SetProtocols([]string)     {}
+	return *s.rememberUpgrade
+}
+func (s *SocketOptions) GetRawRememberUpgrade() *bool {
+	return s.rememberUpgrade
+}
+func (s *SocketOptions) SetRememberUpgrade(rememberUpgrade bool) {
+	s.rememberUpgrade = &rememberUpgrade
+}
+
+func (s *SocketOptions) OnlyBinaryUpgrades() bool {
+	if s.onlyBinaryUpgrades == nil {
+		return false
+	}
+
+	return *s.onlyBinaryUpgrades
+}
+func (s *SocketOptions) GetRawOnlyBinaryUpgrades() *bool {
+	return s.onlyBinaryUpgrades
+}
+func (s *SocketOptions) SetOnlyBinaryUpgrades(onlyBinaryUpgrades bool) {
+	s.onlyBinaryUpgrades = &onlyBinaryUpgrades
+}
+
+func (s *SocketOptions) RequestTimeout() time.Duration {
+	if s.requestTimeout == nil {
+		return 0
+	}
+
+	return *s.requestTimeout
+}
+func (s *SocketOptions) GetRawRequestTimeout() *time.Duration {
+	return s.requestTimeout
+}
+func (s *SocketOptions) SetRequestTimeout(requestTimeout time.Duration) {
+	s.requestTimeout = &requestTimeout
+}
+
+func (s *SocketOptions) TransportOptions() map[string]*SocketOptions {
+	return s.transportOptions
+}
+func (s *SocketOptions) GetRawTransportOptions() map[string]*SocketOptions {
+	return s.transportOptions
+}
+func (s *SocketOptions) SetTransportOptions(transportOptions map[string]*SocketOptions) {
+	s.transportOptions = transportOptions
+}
+
+func (s *SocketOptions) TLSClientConfig() *tls.Config {
+	return s.tLSClientConfig
+}
+func (s *SocketOptions) GetRawTLSClientConfig() *tls.Config {
+	return s.tLSClientConfig
+}
+func (s *SocketOptions) SetTLSClientConfig(tLSClientConfig *tls.Config) {
+	s.tLSClientConfig = tLSClientConfig
+}
+
+func (s *SocketOptions) ExtraHeaders() map[string]string {
+	return s.extraHeaders
+}
+func (s *SocketOptions) GetRawExtraHeaders() map[string]string {
+	return s.extraHeaders
+}
+func (s *SocketOptions) SetExtraHeaders(extraHeaders map[string]string) {
+	s.extraHeaders = extraHeaders
+}
+
+func (s *SocketOptions) CloseOnBeforeunload() bool {
+	if s.closeOnBeforeunload == nil {
+		return true
+	}
+
+	return *s.closeOnBeforeunload
+}
+func (s *SocketOptions) GetRawCloseOnBeforeunload() *bool {
+	return s.closeOnBeforeunload
+}
+func (s *SocketOptions) SetCloseOnBeforeunload(closeOnBeforeunload bool) {
+	s.closeOnBeforeunload = &closeOnBeforeunload
+}
+
+func (s *SocketOptions) PerMessageDeflate() *PerMessageDeflate {
+	return s.perMessageDeflate
+}
+func (s *SocketOptions) GetRawPerMessageDeflate() *PerMessageDeflate {
+	return s.perMessageDeflate
+}
+func (s *SocketOptions) SetPerMessageDeflate(perMessageDeflate *PerMessageDeflate) {
+	s.perMessageDeflate = perMessageDeflate
+}
+
+func (s *SocketOptions) Path() string {
+	if s.path == nil {
+		return "/engine.io"
+	}
+
+	return *s.path
+}
+func (s *SocketOptions) GetRawPath() *string {
+	return s.path
+}
+func (s *SocketOptions) SetPath(path string) {
+	s.path = &path
+}
+
+func (s *SocketOptions) Protocols() []string {
+	return s.protocols
+}
+func (s *SocketOptions) GetRawProtocols() []string {
+	return s.protocols
+}
+func (s *SocketOptions) SetProtocols(protocols []string) {
+	s.protocols = protocols
+}
