@@ -8,6 +8,7 @@ import (
 
 	"github.com/zishang520/engine.io-client/config"
 	_http "github.com/zishang520/engine.io-client/http"
+	"github.com/zishang520/engine.io-client/utils"
 	"github.com/zishang520/engine.io/events"
 	"github.com/zishang520/engine.io/log"
 	"github.com/zishang520/engine.io/packet"
@@ -117,6 +118,7 @@ func (p *Polling) _onPacket(packetData *packet.Packet) {
 
 // Overloads onData to detect payloads.
 func (p *Polling) onData(data types.BufferInterface) {
+	client_polling_log.Debug("polling got data %s", data.String())
 	// decode payload
 	for _, packetData := range parser.Parserv4().DecodePayload(data) {
 		p._onPacket(packetData)
@@ -129,7 +131,7 @@ func (p *Polling) onData(data types.BufferInterface) {
 		if "open" == p.readyState() {
 			p.Poll()
 		} else {
-			// debug(`ignoring poll - transport state "%s"`, p.readyState())
+			client_polling_log.Debug(`ignoring poll - transport state "%s"`, this.readyState)
 		}
 	}
 }
@@ -137,6 +139,7 @@ func (p *Polling) onData(data types.BufferInterface) {
 // For polling, send a close packet.
 func (p *Polling) _doClose() {
 	_close := events.Listener(func(...any) {
+		client_polling_log.Debug("writing close packet")
 		t.write([]*packet.Packet{
 			&packet.Packet{
 				Type: packet.CLOSE,
@@ -144,10 +147,12 @@ func (p *Polling) _doClose() {
 		})
 	})
 	if "open" == t.readyState() {
+		client_polling_log.Debug("transport open - closing")
 		_close()
 	} else {
 		// in case we're trying to close while
 		// handshaking is in progress (GH-164)
+		client_polling_log.Debug("transport not open - deferring close")
 		t.Once("open", _close)
 	}
 }
@@ -174,7 +179,7 @@ func (p *Polling) uri() string {
 	query := url.Values(p.query.All())
 	// cache busting is forced
 	if false != p.opts.timestampRequests {
-		query.Set(p.opts.timestampParam, "yeast();")
+		query.Set(p.opts.timestampParam, utils.YeastDate())
 	}
 	if !p.supportsBinary && !query.Has("sid") {
 		query.Set(b64, "1")
@@ -197,7 +202,6 @@ func (p *Polling) uri() string {
 
 // Creates a request.
 func (p *Polling) request(opts *_http.Options) (*_http.Response, error) {
-	// Object.assign(opts, { xd: p.xd, xs: p.xs }, p.opts);
 	if opts == nil {
 		opts = &_http.Options{}
 	}

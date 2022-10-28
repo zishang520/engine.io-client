@@ -7,6 +7,7 @@ import (
 
 	"github.com/gorilla/websocket"
 	"github.com/zishang520/engine.io-client/config"
+	"github.com/zishang520/engine.io-client/utils"
 )
 
 type WS struct {
@@ -184,7 +185,7 @@ func (w *WS) uri() string {
 	query := url.Values(p.query.All())
 	// cache busting is forced
 	if false != p.opts.timestampRequests {
-		query.Set(p.opts.timestampParam, "yeast();")
+		query.Set(p.opts.timestampParam, utils.YeastDate())
 	}
 	if !p.supportsBinary {
 		query.Set(b64, "1")
