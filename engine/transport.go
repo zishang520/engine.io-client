@@ -13,7 +13,7 @@ import (
 	"github.com/zishang520/engine.io/utils"
 )
 
-var client_log = log.NewLog("engine.io-client:transport")
+var client_transport_log = log.NewLog("engine.io-client:transport")
 
 type CloseDetails struct {
 	Description string
@@ -106,7 +106,7 @@ func (t *Transport) Send(packets []*packet.Packet) {
 		t.write(packets)
 	} else {
 		// this might happen if the transport was silently closed in the beforeunload event handler
-		client_log.Debug("transport is not open, discarding packets")
+		client_transport_log.Debug("transport is not open, discarding packets")
 	}
 }
 

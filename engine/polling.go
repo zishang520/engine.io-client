@@ -9,8 +9,11 @@ import (
 	"github.com/zishang520/engine.io-client/config"
 	_http "github.com/zishang520/engine.io-client/http"
 	"github.com/zishang520/engine.io/events"
+	"github.com/zishang520/engine.io/log"
 	"github.com/zishang520/engine.io/packet"
 )
+
+var client_polling_log = log.NewLog("engine.io-client:polling")
 
 type Polling struct {
 	*Transport
@@ -26,7 +29,7 @@ func NewPolling(opts config.SocketOptionsInterface) {
 	p._polling = false
 
 	// supports binary
-	p.supportsBinary = !opts.forceBase64
+	p.supportsBinary = !opts.ForceBase64()
 
 	p.doOpen = p._doOpen
 	p.doClose = p._doClose
@@ -60,32 +63,34 @@ func (p *Polling) _doOpen() {
 // Pauses polling.
 func (p *Polling) pause(onPause func()) {
 	p.setReadyState("pausing")
-	pause := func() {
+	_pause := func() {
+		client_polling_log.Debug("paused")
 		p.setReadyState("paused")
 		onPause()
 	}
 	if p.polling() || !p.writable() {
-		total := 0
+		total := uint32(0)
 		if p.polling() {
-			total++
-			p.Once("pollComplete", func() {
-				total--
-				if total == 0 {
-					pause()
+			client_polling_log.Debug("we are currently polling - waiting to pause")
+			atomic.AddUint32(&total, 1)
+			p.Once("pollComplete", func(...any) {
+				client_polling_log.Debug("pre-pause polling complete")
+				if atomic.AddUint32(&total, ^uint32(0)) == 0 {
+					_pause()
 				}
 			})
 		}
 		if !p.writable() {
-			total++
-			p.Once("drain", func() {
-				total--
-				if total == 0 {
-					pause()
+			atomic.AddUint32(&total, 1)
+			p.Once("drain", func(...any) {
+				client_polling_log.Debug("pre-pause writing complete")
+				if atomic.AddUint32(&total, ^uint32(0)) == 0 {
+					_pause()
 				}
 			})
 		}
 	} else {
-		pause()
+		_pause()
 	}
 }
 
