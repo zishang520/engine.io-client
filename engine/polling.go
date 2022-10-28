@@ -170,31 +170,31 @@ func (p *Polling) _write(packets []*packet.Packet) {
 // Generates uri for connection.
 func (p *Polling) uri() string {
 	url := &url.URL{
-		Path:   p.opts.path,
+		Path:   p.opts.Path(),
 		Scheme: "http",
 	}
-	if p.opts.secure {
+	if p.opts.Secure() {
 		url.Scheme = "https"
 	}
 	query := url.Values(p.query.All())
 	// cache busting is forced
-	if false != p.opts.timestampRequests {
-		query.Set(p.opts.timestampParam, utils.YeastDate())
+	if false != p.opts.TimestampRequests() {
+		query.Set(p.opts.TimestampParam(), utils.YeastDate())
 	}
 	if !p.supportsBinary && !query.Has("sid") {
 		query.Set(b64, "1")
 	}
 	url.RawQuery = query.Encode()
 	host := ""
-	if strings.Index(p.opts.hostname, ":") > -1 {
-		host += "[" + p.opts.hostname + "]"
+	if strings.Index(p.opts.Hostname(), ":") > -1 {
+		host += "[" + p.opts.Hostname() + "]"
 	} else {
-		host += p.opts.hostname
+		host += p.opts.Hostname()
 	}
 	port := ""
 	// avoid port if default for schema
-	if p.opts.port && (("https" == url.Scheme && p.opts.port != "443") || ("http" == url.Scheme && p.opts.port != "80")) {
-		port = ":" + p.opts.port
+	if p.opts.Port() && (("https" == url.Scheme && p.opts.Port() != "443") || ("http" == url.Scheme && p.opts.Port() != "80")) {
+		port = ":" + p.opts.Port()
 	}
 	url.Host = host + port
 	return url.String()
@@ -205,8 +205,8 @@ func (p *Polling) request(opts *_http.Options) (*_http.Response, error) {
 	if opts == nil {
 		opts = &_http.Options{}
 	}
-	opts.Timeout = p.opts.RequestTimeout
-	opts.TLSClientConfig = p.opts.TLSClientConfig
+	opts.Timeout = p.opts.RequestTimeout()
+	opts.TLSClientConfig = p.opts.TLSClientConfig()
 	return NewRequest(p.uri(), opts)
 }
 
