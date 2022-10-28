@@ -8,7 +8,10 @@ import (
 	"github.com/gorilla/websocket"
 	"github.com/zishang520/engine.io-client/config"
 	"github.com/zishang520/engine.io-client/utils"
+	"github.com/zishang520/engine.io/log"
 )
+
+var client_websocket_log = log.NewLog("engine.io-client:websocket")
 
 type WS struct {
 	*Transport
@@ -21,7 +24,7 @@ type WS struct {
 func NewWS(opts config.SocketOptionsInterface) {
 	p := &WS{}
 	p.Transport = NewTransport(opts)
-	p.supportsBinary = !opts.forceBase64
+	p.supportsBinary = !opts.ForceBase64()
 
 	p.doOpen = p._doOpen
 	p.doClose = p._doClose
@@ -39,9 +42,9 @@ func (w *WS) _doOpen() {
 	dialer := &websocket.Dialer{
 		Proxy:            http.ProxyFromEnvironment,
 		HandshakeTimeout: 45 * time.Second,
-		Subprotocols:     w.opts.Protocols,
+		Subprotocols:     w.opts.Protocols(),
 	}
-	c, _, err := dialer.Dial(w.uri(), w.opts.ExtraHeaders)
+	c, _, err := dialer.Dial(w.uri(), w.opts.ExtraHeaders())
 	if err != nil {
 		w.Emit("error", err)
 		return
@@ -150,14 +153,17 @@ func (w *websocket) send(ws *websocket.Conn, data types.BufferInterface, compres
 	// throw an error
 	write, err := ws.NextWriter(mt)
 	if err != nil {
+		client_websocket_log.Debug("websocket send error: %v", err)
 		return
 	}
 	defer func() {
 		if err := write.Close(); err != nil {
+			client_websocket_log.Debug("websocket send error: %v", err)
 			return
 		}
 	}()
 	if _, err := io.Copy(write, data); err != nil {
+		client_websocket_log.Debug("websocket send error: %v", err)
 		return
 	}
 }
@@ -176,31 +182,31 @@ func (w *WS) _doClose() {
 // Generates uri for connection.
 func (w *WS) uri() string {
 	url := &url.URL{
-		Path:   p.opts.path,
+		Path:   p.opts.Path(),
 		Scheme: "ws",
 	}
-	if p.opts.secure {
+	if p.opts.Secure() {
 		url.Scheme = "wss"
 	}
 	query := url.Values(p.query.All())
 	// cache busting is forced
-	if false != p.opts.timestampRequests {
-		query.Set(p.opts.timestampParam, utils.YeastDate())
+	if false != p.opts.TimestampRequests() {
+		query.Set(p.opts.TimestampParam(), utils.YeastDate())
 	}
 	if !p.supportsBinary {
 		query.Set(b64, "1")
 	}
 	url.RawQuery = query.Encode()
 	host := ""
-	if strings.Index(p.opts.hostname, ":") > -1 {
-		host += "[" + p.opts.hostname + "]"
+	if strings.Index(p.opts.Hostname(), ":") > -1 {
+		host += "[" + p.opts.Hostname() + "]"
 	} else {
-		host += p.opts.hostname
+		host += p.opts.Hostname()
 	}
 	port := ""
 	// avoid port if default for schema
-	if p.opts.port && (("wss" == url.Scheme && p.opts.port != "443") || ("ws" == url.Scheme && p.opts.port != "80")) {
-		port = ":" + p.opts.port
+	if p.opts.Port() && (("wss" == url.Scheme && p.opts.Port() != "443") || ("ws" == url.Scheme && p.opts.Port() != "80")) {
+		port = ":" + p.opts.Port()
 	}
 	url.Host = host + port
 	return url.String()
