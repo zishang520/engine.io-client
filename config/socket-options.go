@@ -107,10 +107,6 @@ func (s *SocketOptions) Assign(data SocketOptionsInterface) SocketOptionsInterfa
 		return s
 	}
 
-	if s.GetRawPingTimeout() == nil {
-		s.SetPingTimeout(data.PingTimeout())
-	}
-
 	if s.GetRawHost() == nil {
 		s.SetHost(data.Host())
 	}
