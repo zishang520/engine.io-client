@@ -8,11 +8,15 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/zishang520/engine.io-client/config"
 	"github.com/zishang520/engine.io/events"
+	"github.com/zishang520/engine.io/log"
 	"github.com/zishang520/engine.io/parser"
 	"github.com/zishang520/engine.io/types"
 	"github.com/zishang520/engine.io/utils"
 )
+
+var client_socket_log = log.NewLog("engine.io-client:socket")
 
 type socketState struct {
 	priorWebsocketSuccess bool
@@ -55,7 +59,7 @@ type Socket struct {
 	offlineEventListener func()
 	upgrading            bool
 	maxPayload           int64
-	opts                 SocketOptions
+	opts                 config.SocketOptionsInterface
 	secure               bool
 	hostname             string
 	port                 string
@@ -64,7 +68,7 @@ type Socket struct {
 }
 
 // Socket constructor.
-func NewSocket(uri string, opts SocketOptions) *Socket {
+func NewSocket(uri string, opts config.SocketOptionsInterface) *Socket {
 	s := &Socket{}
 
 	s.EventEmitter = events.New()
@@ -137,6 +141,7 @@ func NewSocket(uri string, opts SocketOptions) *Socket {
 
 // Creates transport of the given type.
 func (s *Socket) createTransport(name string) {
+	client_socket_log.Debug(`creating transport "%s"`, name)
 	query := utils.NewParameterBag(s.opts.Query().All())
 	// append engine.io protocol identifier
 	query.Set("EIO", parser.Parserv4().Protocol())
@@ -146,14 +151,21 @@ func (s *Socket) createTransport(name string) {
 	if s.id != "" {
 		query.Set("sid", s.id)
 	}
-	// config.DefaultSocketOptions().Assign(s.opts.TransportOptions()[name])
-	// const opts = Object.assign({}, s.opts.TransportOptions()[name], s.opts, {
-	//     query,
-	//     socket: s,
-	//     hostname: s.hostname,
-	//     secure: s.secure,
-	//     port: s.port
-	// });
+	opts := config.DefaultSocketOptions()
+
+	if transportOptions := s.opts.TransportOptions(); transportOptions != nil {
+		if topts, ok := transportOptions[name]; ok {
+			opts.Assign(topts)
+		}
+	}
+
+	opts.Assign(s.opts)
+
+	opts.SetQuery(query)
+	opts.SetHostname(s.hostname)
+	opts.SetSecure(s.secure)
+	opts.SetPort(s.port)
+	client_socket_log.Debug("options: %v", opts)
 	return Transports()[name].New(opts)
 }
 

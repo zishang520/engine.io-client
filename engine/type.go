@@ -1,5 +1,10 @@
 package engine
 
+import (
+	"github.com/zishang520/engine.io/packet"
+	"github.com/zishang520/engine.io/types"
+)
+
 type TransportInterface interface {
 	// Emits an error.
 	onError(string, error, any)
@@ -12,7 +17,7 @@ type TransportInterface interface {
 	// Called upon open
 	onOpen()
 	// Called with data.
-	onData(RawData)
+	onData(types.BufferInterface)
 	// Called with a decoded packet.
 	onPacket(*packet.Packet)
 	// Called upon close.
