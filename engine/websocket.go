@@ -153,17 +153,17 @@ func (w *websocket) send(ws *websocket.Conn, data types.BufferInterface, compres
 	// throw an error
 	write, err := ws.NextWriter(mt)
 	if err != nil {
-		client_websocket_log.Debug("websocket send error: %v", err)
+		client_websocket_log.Debug("websocket send error: %s", err.Error())
 		return
 	}
 	defer func() {
 		if err := write.Close(); err != nil {
-			client_websocket_log.Debug("websocket send error: %v", err)
+			client_websocket_log.Debug("websocket send error: %s", err.Error())
 			return
 		}
 	}()
 	if _, err := io.Copy(write, data); err != nil {
-		client_websocket_log.Debug("websocket send error: %v", err)
+		client_websocket_log.Debug("websocket send error: %s", err.Error())
 		return
 	}
 }

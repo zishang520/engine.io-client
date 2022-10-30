@@ -155,7 +155,7 @@ func NewSocket(uri string, opts config.SocketOptionsInterface) *Socket {
 }
 
 // Creates transport of the given type.
-func (s *Socket) createTransport(name string) {
+func (s *Socket) createTransport(name string) (TransportInterface, error) {
 	client_socket_log.Debug(`creating transport "%s"`, name)
 	query := utils.NewParameterBag(s.opts.Query().All())
 	// append engine.io protocol identifier
@@ -181,7 +181,10 @@ func (s *Socket) createTransport(name string) {
 	opts.SetSecure(s.secure)
 	opts.SetPort(s.port)
 	client_socket_log.Debug("options: %v", opts)
-	return Transports()[name].New(opts)
+	if transport, ok := Transports()[name]; ok {
+		return transport.New(opts), nil
+	}
+	return nil, errors.New("Transport type not found")
 }
 
 // Initializes transport to use and starts probe.
@@ -197,13 +200,14 @@ func (s *Socket) open() {
 	}
 	s.setReadyState("opening")
 	// Retry with the next transport if the transport is disabled (jsonp: false)
-	defer func() {
-		if recover() != nil {
-			s.transports.Delete(name)
-			s.open()
-		}
-	}()
-	s.setTransport(s.createTransport(name))
+	transport, err := s.createTransport(name)
+	if err != nil {
+		client_socket_log.Debug("error while creating transport: %s", err.Error())
+		s.transports.Delete(name)
+		s.open()
+		return
+	}
+	s.setTransport(transport)
 }
 
 // Sets the current transport. Disables the existing one (if any).
