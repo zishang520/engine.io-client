@@ -48,8 +48,7 @@ type Socket struct {
 
 	id                   string
 	transport            TransportInterface
-	binaryType           string
-	readyState           string
+	_readyState          string
 	writeBuffer          []*packet.Packet
 	prevBufferLen        int
 	upgrades             *types.Set[string]
@@ -65,6 +64,22 @@ type Socket struct {
 	port                 string
 	transports           *types.Set[string]
 	protocol             int
+
+	mureadyState sync.RWMutex
+}
+
+func (s *Socket) readyState() string {
+	s.mureadyState.RLock()
+	defer s.mureadyState.RUnlock()
+
+	return s._readyState
+}
+
+func (s *Socket) setReadyState(state string) {
+	s.mureadyState.Lock()
+	defer s.mureadyState.Unlock()
+
+	s._readyState = state
 }
 
 // Socket constructor.
@@ -110,7 +125,7 @@ func NewSocket(uri string, opts config.SocketOptionsInterface) *Socket {
 	} else {
 		s.transports = types.NewSet("polling", "websocket")
 	}
-	s.readyState = ""
+	s._readyState = ""
 	s.writeBuffer = []*packet.Packet{}
 	s.prevBufferLen = 0
 	_opts = config.DefaultSocketOptions()
@@ -180,7 +195,7 @@ func (s *Socket) open() {
 	} else {
 		name = s.transports.Keys()[0]
 	}
-	s.readyState = "opening"
+	s.setReadyState("opening")
 	// Retry with the next transport if the transport is disabled (jsonp: false)
 	defer func() {
 		if recover() != nil {
@@ -238,7 +253,7 @@ func (s *Socket) probe(name string) {
 					if failed {
 						return
 					}
-					if "closed" == s.readyState {
+					if "closed" == s.readyState() {
 						return
 					}
 					cleanup()
@@ -304,13 +319,13 @@ func (s *Socket) probe(name string) {
 
 // Called when connection is deemed open.
 func (s *Socket) onOpen() {
-	s.readyState = "open"
+	s.setReadyStat("open")
 	priorWebsocketSuccess.set("websocket" == s.transport.Name())
 	s.Emit("open")
 	s.flush()
 	// we check for `readyState` in case an `open`
 	// listener already closed the socket
-	if "open" == s.readyState && s.opts.Upgrade() && s.transport.pause {
+	if "open" == s.readyState() && s.opts.Upgrade() && s.transport.pause {
 		for _, upgrade := range s.upgrades.Key() {
 			s.probe(upgrade)
 		}
@@ -319,9 +334,7 @@ func (s *Socket) onOpen() {
 
 // Handles a packet.
 func (s *Socket) onPacket(msg) {
-	if "opening" == s.readyState ||
-		"open" == s.readyState ||
-		"closing" == s.readyState {
+	if readyState := s.readyState(); "opening" == readyState || "open" == readyState || "closing" == readyState {
 		// debug('socket receive: type "%s", data "%s"', msg.type, msg.data);
 		s.Emit("packet", msg)
 		// Socket is live - any packet counts
@@ -373,7 +386,7 @@ func (s *Socket) onHandshake(data io.Reader) {
 	s.maxPayload = msg.MaxPayload
 	s.onOpen()
 	// In case open handler closes socket
-	if "closed" == s.readyState {
+	if "closed" == s.readyState() {
 		return
 	}
 	s.resetPingTimeout()
@@ -406,7 +419,7 @@ func (s *Socket) onDrain() {
 
 // Flush write buffers.
 func (s *Socket) flush() {
-	if "closed" != s.readyState && s.transport.writable && !s.upgrading && len(s.writeBuffer) > 0 {
+	if "closed" != s.readyState() && s.transport.writable && !s.upgrading && len(s.writeBuffer) > 0 {
 		packets := s.getWritablePackets()
 		// debug("flushing %d packets in socket", packets.length)
 		s.transport.Send(packets)
@@ -452,7 +465,7 @@ func (s *Socket) Send(msg io.Reader, options *packet.Options, fn any) *Socket {
 
 // Sends a packet.
 func (s *Socket) sendPacket(t string, data io.Reader, options *packet.Options, fn any) {
-	if "closing" == s.readyState || "closed" == s.readyState {
+	if readyState := s.readyState(); "closing" == readyState || "closed" == readyState {
 		return
 	}
 	packet := &packet.Packet{
@@ -485,8 +498,8 @@ func (s *Socket) Close() *Socket {
 		s.Once("upgrade", cleanupAndClose)
 		s.Once("upgradeError", cleanupAndClose)
 	}
-	if "opening" == s.readyState || "open" == s.readyState {
-		s.readyState = "closing"
+	if readyState := s.readyState(); "opening" == readyState || "open" == readyState {
+		s.setReadyState("closing")
 		if len(s.writeBuffer) > 0 {
 			s.Once("drain", func() {
 				if s.upgrading {
@@ -514,9 +527,7 @@ func (s *Socket) onError(err error) {
 
 // Called upon transport close.
 func (s *Socket) onClose(reason, description) {
-	if "opening" == s.readyState ||
-		"open" == s.readyState ||
-		"closing" == s.readyState {
+	if readyState := s.readyState(); "opening" == readyState || "open" == readyState || "closing" == readyState {
 		// debug('socket close with reason: "%s"', reason);
 		// clear timers
 		utils.ClearTimeout(s.pingTimeoutTimer)
@@ -528,7 +539,7 @@ func (s *Socket) onClose(reason, description) {
 		s.transport.removeAllListeners()
 		// removeEventListener("offline", s.offlineEventListener, false);
 		// set ready state
-		s.readyState = "closed"
+		s.setReadyState("closed")
 		// clear session id
 		s.id = ""
 		// emit close event

@@ -85,7 +85,7 @@ func (t *Transport) onError(reason string, description error) {
 
 // Opens the transport.
 func (t *Transport) Open() {
-	if "closed" == t.readyState() || "" == t.readyState() {
+	if readyState := t.readyState(); "closed" == readyState || "" == readyState {
 		t.setReadyState("opening")
 		t.doOpen()
 	}
@@ -94,7 +94,7 @@ func (t *Transport) Open() {
 
 // Closes the transport.
 func (t *Transport) Close() {
-	if "opening" == t.readyState() || "open" == t.readyState() {
+	if readyState := t.readyState(); "opening" == readyState || "open" == readyState {
 		t.doClose()
 		t.onClose(nil)
 	}
