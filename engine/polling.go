@@ -32,6 +32,7 @@ func NewPolling(opts config.SocketOptionsInterface) {
 	// supports binary
 	p.supportsBinary = !opts.ForceBase64()
 
+	p.pause = p._pause
 	p.doOpen = p._doOpen
 	p.doClose = p._doClose
 	p.write = p._write
@@ -62,9 +63,9 @@ func (p *Polling) _doOpen() {
 }
 
 // Pauses polling.
-func (p *Polling) pause(onPause func()) {
+func (p *Polling) _pause(onPause func()) {
 	p.setReadyState("pausing")
-	_pause := func() {
+	end := func() {
 		client_polling_log.Debug("paused")
 		p.setReadyState("paused")
 		onPause()
@@ -77,7 +78,7 @@ func (p *Polling) pause(onPause func()) {
 			p.Once("pollComplete", func(...any) {
 				client_polling_log.Debug("pre-pause polling complete")
 				if atomic.AddUint32(&total, ^uint32(0)) == 0 {
-					_pause()
+					end()
 				}
 			})
 		}
@@ -86,12 +87,12 @@ func (p *Polling) pause(onPause func()) {
 			p.Once("drain", func(...any) {
 				client_polling_log.Debug("pre-pause writing complete")
 				if atomic.AddUint32(&total, ^uint32(0)) == 0 {
-					_pause()
+					end()
 				}
 			})
 		}
 	} else {
-		_pause()
+		end()
 	}
 }
 
@@ -109,7 +110,7 @@ func (p *Polling) _onPacket(packetData *packet.Packet) {
 	}
 	// if its a close packet, we close the ongoing requests
 	if packet.CLOSE == packetData.Type {
-		p.onClose(&CloseDetails{Description: "transport closed by the server"})
+		p.onClose(errors.New("transport closed by the server"))
 		return
 	}
 	// otherwise bypass onData and handle the message

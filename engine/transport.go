@@ -15,11 +15,6 @@ import (
 
 var client_transport_log = log.NewLog("engine.io-client:transport")
 
-type CloseDetails struct {
-	Description string
-	Error       error
-}
-
 type Transport struct {
 	events.EventEmitter
 
@@ -32,6 +27,7 @@ type Transport struct {
 	mu_readyState sync.RWMutex
 	mu_writable   sync.RWMutex
 
+	pause   func(func())
 	doOpen  func()
 	doClose func()
 	write   func([]*packet.Packet)
@@ -129,7 +125,7 @@ func (t *Transport) onPacket(packet *packet.Packet) {
 }
 
 // Called upon close.
-func (t *Transport) onClose(details *CloseDetails) {
+func (t *Transport) onClose(details error) {
 	t.setReadyState("closed")
 	t.Emit("close", details)
 }

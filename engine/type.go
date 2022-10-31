@@ -21,7 +21,7 @@ type TransportInterface interface {
 	// Called with a decoded packet.
 	onPacket(*packet.Packet)
 	// Called upon close.
-	onClose(*CloseDetails)
+	onClose(error)
 
 	doOpen()
 	doClose()

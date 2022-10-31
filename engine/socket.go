@@ -65,19 +65,27 @@ type Socket struct {
 	transports           *types.Set[string]
 	protocol             int
 
-	mureadyState sync.RWMutex
+	mu_readyState sync.RWMutex
+	mutransport   sync.RWMutex
+}
+
+func (s *socket) Transport() TransportInterface {
+	s.mutransport.RLock()
+	defer s.mutransport.RUnlock()
+
+	return s.transport
 }
 
 func (s *Socket) readyState() string {
-	s.mureadyState.RLock()
-	defer s.mureadyState.RUnlock()
+	s.mu_readyState.RLock()
+	defer s.mu_readyState.RUnlock()
 
 	return s._readyState
 }
 
 func (s *Socket) setReadyState(state string) {
-	s.mureadyState.Lock()
-	defer s.mureadyState.Unlock()
+	s.mu_readyState.Lock()
+	defer s.mu_readyState.Unlock()
 
 	s._readyState = state
 }
@@ -140,10 +148,10 @@ func NewSocket(uri string, opts config.SocketOptionsInterface) *Socket {
 			for s := range signalC {
 				switch s {
 				case os.Interrupt, syscall.SIGTERM:
-					if s.transport != nil {
+					if transport := s.Transport(); transport != nil {
 						// silently close the transport
-						s.transport.RemoveAllListeners()
-						s.transport.Close()
+						transport.RemoveAllListeners()
+						transport.Close()
 					}
 					return
 				}
@@ -212,16 +220,20 @@ func (s *Socket) open() {
 
 // Sets the current transport. Disables the existing one (if any).
 func (s *Socket) setTransport(transport TransportInterface) {
-	if s.transport {
+	s.mutransport.RLock()
+	if s.transport != nil {
 		s.transport.RemoveAllListeners()
 	}
+	s.mutransport.RUnlock()
 	// set up transport
+	s.mutransport.Lock()
 	s.transport = transport
+	s.mutransport.Unlock()
 	// set up transport listeners
 	transport.On("drain", func(...any) { s.onDrain() })
-	transport.On("packet", func(...any) { s.onPacket() })
-	transport.On("error", func(e ...any) { s.onError(e[0]) })
-	transport.On("close", func(reason ...any) { s.onClose("transport close", reason[0]) })
+	transport.On("packet", func(packets ...any) { s.onPacket(packets[0].(*packet.Packet)) })
+	transport.On("error", func(errors ...any) { s.onError(errors[0].(error)) })
+	transport.On("close", func(reason ...any) { s.onClose("transport close", reason[0].(error)) })
 }
 
 // Probes a transport.
@@ -253,7 +265,7 @@ func (s *Socket) probe(name string) {
 					return
 				}
 				SocketState.set("websocket" == transport.Name())
-				s.transport.pause(func() {
+				s.Transport().pause(func() {
 					if failed {
 						return
 					}
@@ -324,12 +336,12 @@ func (s *Socket) probe(name string) {
 // Called when connection is deemed open.
 func (s *Socket) onOpen() {
 	s.setReadyStat("open")
-	priorWebsocketSuccess.set("websocket" == s.transport.Name())
+	priorWebsocketSuccess.set("websocket" == s.Transport().Name())
 	s.Emit("open")
 	s.flush()
 	// we check for `readyState` in case an `open`
 	// listener already closed the socket
-	if "open" == s.readyState() && s.opts.Upgrade() && s.transport.pause {
+	if "open" == s.readyState() && s.opts.Upgrade() && s.Transport().pause != nil {
 		for _, upgrade := range s.upgrades.Key() {
 			s.probe(upgrade)
 		}
@@ -337,7 +349,7 @@ func (s *Socket) onOpen() {
 }
 
 // Handles a packet.
-func (s *Socket) onPacket(msg) {
+func (s *Socket) onPacket(msg *packet.Packet) {
 	if readyState := s.readyState(); "opening" == readyState || "open" == readyState || "closing" == readyState {
 		// debug('socket receive: type "%s", data "%s"', msg.type, msg.data);
 		s.Emit("packet", msg)
@@ -400,7 +412,7 @@ func (s *Socket) onHandshake(data io.Reader) {
 func (s *Socket) resetPingTimeout() {
 	utils.ClearTimeout(s.pingTimeoutTimer)
 	s.pingTimeoutTimer = utils.SetTimeOut(func() {
-		s.onClose("ping timeout")
+		s.onClose("ping timeout", nil)
 	}, s.pingInterval+s.pingTimeout)
 	// if s.opts.AutoUnref() {
 	// 	s.pingTimeoutTimer.Unref()
@@ -488,7 +500,7 @@ func (s *Socket) sendPacket(t string, data io.Reader, options *packet.Options, f
 // Closes the connection.
 func (s *Socket) Close() *Socket {
 	close := func() {
-		s.onClose("forced close")
+		s.onClose("forced close", nil)
 		// debug("socket closing - telling transport to close")
 		s.transport.Close()
 	}
@@ -530,7 +542,7 @@ func (s *Socket) onError(err error) {
 }
 
 // Called upon transport close.
-func (s *Socket) onClose(reason, description) {
+func (s *Socket) onClose(reason string, description error) {
 	if readyState := s.readyState(); "opening" == readyState || "open" == readyState || "closing" == readyState {
 		// debug('socket close with reason: "%s"', reason);
 		// clear timers

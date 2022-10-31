@@ -71,7 +71,7 @@ func (w *WS) addEventListeners() {
 			mt, message, err := ws.NextReader()
 			if err != nil {
 				if websocket.IsUnexpectedCloseError(err) {
-					w.onClose(&CloseDetails{Description: "websocket connection closed", Error: err})
+					w.onClose(errors.New("websocket connection closed: " + err.Error()))
 				} else {
 					w.onError("websocket error", err)
 				}
@@ -93,7 +93,7 @@ func (w *WS) addEventListeners() {
 					w.onData(read)
 				}
 			case websocket.CloseMessage:
-				w.onClose(&CloseDetails{Description: "websocket connection closed"})
+				w.onClose(errors.New("websocket connection closed"))
 				if c, ok := message.(io.Closer); ok {
 					c.Close()
 				}
