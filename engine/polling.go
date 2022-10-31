@@ -221,7 +221,7 @@ func (p *Polling) doWrite(data types.BufferInterface, fn func()) {
 		p.onError("xhr post error", err)
 	}
 	if res.StatusCode != http.StatusOK {
-		p.onError("xhr post error", errors.New(res.StatusCode))
+		p.onError("xhr post error", errors.New(fmt.Sprintf("%s", res.StatusCode)))
 	}
 	fn()
 }
@@ -233,7 +233,7 @@ func (p *Polling) doPoll() {
 		p.onError("xhr poll error", err)
 	}
 	if res.StatusCode != http.StatusOK {
-		p.onError("xhr poll error", errors.New(res.StatusCode))
+		p.onError("xhr poll error", errors.New(fmt.Sprintf("%s", res.StatusCode)))
 	}
 	t.onData(res.BodyBuffer)
 }

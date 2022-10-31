@@ -5,7 +5,7 @@ import (
 	"sync"
 
 	"github.com/zishang520/engine.io-client/config"
-	"github.com/zishang520/engine.io-client/errors"
+	"github.com/zishang520/engine.io/errors"
 	"github.com/zishang520/engine.io/events"
 	"github.com/zishang520/engine.io/log"
 	"github.com/zishang520/engine.io/packet"
