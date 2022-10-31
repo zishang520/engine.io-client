@@ -61,6 +61,10 @@ func (p *Polling) _doOpen() {
 	p.Poll()
 }
 
+func (p *Polling) hasPause() bool {
+	return true
+}
+
 // Pauses polling.
 func (p *Polling) pause(onPause func()) {
 	p.setReadyState("pausing")

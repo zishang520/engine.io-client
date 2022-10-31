@@ -27,6 +27,7 @@ type TransportInterface interface {
 	// Called upon close.
 	onClose(error)
 
+	hasPause() bool
 	pause(func())
 	doOpen()
 	doClose()

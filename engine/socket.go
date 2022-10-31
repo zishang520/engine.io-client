@@ -361,7 +361,7 @@ func (s *Socket) onOpen() {
 	s.flush()
 	// we check for `readyState` in case an `open`
 	// listener already closed the socket
-	if "open" == s.readyState() && s.opts.Upgrade() && s.Transport().pause != nil {
+	if "open" == s.readyState() && s.opts.Upgrade() && s.Transport().hasPause() {
 		for _, upgrade := range s.upgrades.Key() {
 			s.probe(upgrade)
 		}

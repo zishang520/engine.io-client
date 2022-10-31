@@ -133,6 +133,11 @@ func (t *Transport) onClose(details error) {
 	t.Emit("close", details)
 }
 
+func (t *Transport) hasPause() bool {
+	return false
+}
+
+func (t *Transport) pause(func())            {}
 func (t *Transport) _doOpen()                {}
 func (t *Transport) _doClose()               {}
 func (t *Transport) _write([]*packet.Packet) {}
