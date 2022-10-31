@@ -32,7 +32,6 @@ func NewPolling(opts config.SocketOptionsInterface) {
 	// supports binary
 	p.supportsBinary = !opts.ForceBase64()
 
-	p.pause = p._pause
 	p.doOpen = p._doOpen
 	p.doClose = p._doClose
 	p.write = p._write
@@ -63,7 +62,7 @@ func (p *Polling) _doOpen() {
 }
 
 // Pauses polling.
-func (p *Polling) _pause(onPause func()) {
+func (p *Polling) pause(onPause func()) {
 	p.setReadyState("pausing")
 	end := func() {
 		client_polling_log.Debug("paused")

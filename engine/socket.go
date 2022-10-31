@@ -279,7 +279,7 @@ func (s *Socket) probe(name string) {
 				s.upgrading = true
 				s.muupgrading.Unlock()
 				s.Emit("upgrading", transport)
-				if !transport {
+				if transport == nil {
 					return
 				}
 				SocketState.set("websocket" == transport.Name())
@@ -295,7 +295,6 @@ func (s *Socket) probe(name string) {
 					transport.Send([]*packet.Packet{
 						&packet.Packet{
 							Type: packet.UPGRADE,
-							Data: types.NewStringBufferString("probe"),
 						},
 					})
 					s.Emit("upgrade", transport)
@@ -317,6 +316,7 @@ func (s *Socket) probe(name string) {
 			StoreInt32(&failed, 1)
 			cleanup()
 			transport.Close()
+			transport = nil
 		}
 		// Handle any error that happens while probing
 		onerror := func(err string) {

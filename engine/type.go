@@ -27,6 +27,7 @@ type TransportInterface interface {
 	// Called upon close.
 	onClose(error)
 
+	pause(func())
 	doOpen()
 	doClose()
 	write([]*packet.Packet)

@@ -27,7 +27,6 @@ type Transport struct {
 	mu_readyState sync.RWMutex
 	mu_writable   sync.RWMutex
 
-	pause   func(func())
 	doOpen  func()
 	doClose func()
 	write   func([]*packet.Packet)
