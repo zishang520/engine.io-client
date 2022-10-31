@@ -1,6 +1,7 @@
 package engine
 
 import (
+	"errors"
 	"net/http"
 	"net/url"
 	"time"

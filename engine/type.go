@@ -6,6 +6,10 @@ import (
 )
 
 type TransportInterface interface {
+	// Transport name.
+	Name() string
+	// Query
+	Query() *utils.ParameterBag
 	// Emits an error.
 	onError(string, error, any)
 	// Opens the transport.

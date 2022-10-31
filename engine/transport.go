@@ -48,6 +48,10 @@ func NewTransport(opts config.SocketOptionsInterface) {
 	t.write = t._write
 }
 
+func (t *Transport) Query() *utils.ParameterBag {
+	return t.query
+}
+
 func (t *Transport) setReadyState(readyState string) {
 	t.mu_readyState.Lock()
 	defer t.mu_readyState.Unlock()
