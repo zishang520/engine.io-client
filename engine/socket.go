@@ -20,19 +20,19 @@ import (
 
 var client_socket_log = log.NewLog("engine.io-client:socket")
 
-type socketState struct {
+type priorWebsocketSuccess struct {
 	priorWebsocketSuccess bool
 	mu                    sync.RWMutex
 }
 
-func (ss *socketState) get() bool {
+func (ss *priorWebsocketSuccess) Get() bool {
 	ss.mu.RLock()
 	defer ss.mu.RUnlock()
 
 	return ss.priorWebsocketSuccess
 }
 
-func (ss *socketState) set(state bool) {
+func (ss *priorWebsocketSuccess) Set(state bool) {
 	ss.mu.Lock()
 	defer ss.mu.Unlock()
 
@@ -40,7 +40,7 @@ func (ss *socketState) set(state bool) {
 }
 
 var (
-	SocketState *socketState = &socketState{}
+	PriorWebsocketSuccess *priorWebsocketSuccess = &priorWebsocketSuccess{}
 )
 
 const Protocol int = parser.Parserv4().Protocol()
@@ -48,29 +48,29 @@ const Protocol int = parser.Parserv4().Protocol()
 type Socket struct {
 	events.EventEmitter
 
-	id                   string
-	transport            TransportInterface
-	_readyState          string
-	writeBuffer          []*packet.Packet
-	prevBufferLen        int
-	upgrades             *types.Set[string]
-	pingInterval         time.Duration
-	pingTimeout          time.Duration
-	pingTimeoutTimer     *utils.Timer
-	offlineEventListener func()
-	upgrading            bool
-	maxPayload           int64
-	opts                 config.SocketOptionsInterface
-	secure               bool
-	hostname             string
-	port                 string
-	transports           *types.Set[string]
-	protocol             int
+	id               string
+	transport        TransportInterface
+	_readyState      string
+	writeBuffer      []*packet.Packet
+	prevBufferLen    uint32
+	upgrades         *types.Set[string]
+	pingInterval     time.Duration
+	pingTimeout      time.Duration
+	pingTimeoutTimer *utils.Timer
+	upgrading        bool
+	maxPayload       int64
+	opts             config.SocketOptionsInterface
+	secure           bool
+	hostname         string
+	port             string
+	transports       *types.Set[string]
 
-	mu_readyState sync.RWMutex
-	mutransport   sync.RWMutex
-	muupgrading   sync.RWMutex
-	muwriteBuffer sync.RWMutex
+	muid               sync.RWMutex
+	mu_readyState      sync.RWMutex
+	mutransport        sync.RWMutex
+	muupgrading        sync.RWMutex
+	muwriteBuffer      sync.RWMutex
+	mupingTimeoutTimer sync.RWMutex
 }
 
 func (s *Socket) Upgrading() bool {
@@ -182,9 +182,11 @@ func (s *Socket) createTransport(name string) (TransportInterface, error) {
 	// transport name
 	query.Set("transport", name)
 	// session id if we already have one
+	s.muid.RLock()
 	if s.id != "" {
 		query.Set("sid", s.id)
 	}
+	s.muid.RUnlock()
 	opts := config.DefaultSocketOptions()
 
 	if transportOptions := s.opts.TransportOptions(); transportOptions != nil {
@@ -209,7 +211,7 @@ func (s *Socket) createTransport(name string) (TransportInterface, error) {
 // Initializes transport to use and starts probe.
 func (s *Socket) open() {
 	name := ""
-	if s.opts.RememberUpgrade() && SocketState.get() && s.transports.Has("websocket") {
+	if s.opts.RememberUpgrade() && PriorWebsocketSuccess.Get() && s.transports.Has("websocket") {
 		name = "websocket"
 	} else if s.transports.Len() == 0 {
 		go s.Emit("error", "No transports available")
@@ -258,7 +260,7 @@ func (s *Socket) probe(name string) {
 	if err != nil {
 		return
 	}
-	SocketState.set(false)
+	PriorWebsocketSuccess.Set(false)
 	failed := int32(0)
 	onTransportOpen := func() {
 		if atomic.LoadInt32(&failed) == 1 {
@@ -288,7 +290,7 @@ func (s *Socket) probe(name string) {
 				if transport == nil {
 					return
 				}
-				SocketState.set("websocket" == transport.Name())
+				PriorWebsocketSuccess.Set("websocket" == transport.Name())
 				client_socket_log.Debug(`pausing current transport "%s"`, s.Transport().Name())
 				s.Transport().pause(func() {
 					if atomic.LoadInt32(&failed) == 1 {
@@ -426,7 +428,9 @@ func (s *Socket) onHandshake(data io.Reader) {
 	}
 
 	s.Emit("handshake", msg)
+	s.muid.Lock()
 	s.id = msg.Sid
+	s.muid.Unlock()
 	s.Transport().Query().Set("sid", msg.Sid)
 	s.upgrades = s.filterUpgrades(msg.Upgrades)
 	s.pingInterval = msg.PingInterval * time.Millisecond
@@ -442,6 +446,9 @@ func (s *Socket) onHandshake(data io.Reader) {
 
 // Sets and resets ping timeout timer based on server pings.
 func (s *Socket) resetPingTimeout() {
+	s.mupingTimeoutTimer.Lock()
+	defer s.mupingTimeoutTimer.Unlock()
+
 	utils.ClearTimeout(s.pingTimeoutTimer)
 	s.pingTimeoutTimer = utils.SetTimeOut(func() {
 		s.onClose("ping timeout", nil)
@@ -454,13 +461,13 @@ func (s *Socket) resetPingTimeout() {
 // Called on `drain` event
 func (s *Socket) onDrain() {
 	s.muwriteBuffer.Lock()
-	s.writeBuffer = s.writeBuffer[s.prevBufferLen:]
+	s.writeBuffer = s.writeBuffer[atomic.LoadUint32(&s.prevBufferLen):]
 	l := len(s.writeBuffer)
 	s.muwriteBuffer.Unlock()
 	// setting prevBufferLen = 0 is very important
 	// for example, when upgrading, upgrade packet is sent over,
 	// and a nonzero prevBufferLen could cause problems on `drain`
-	s.prevBufferLen = 0
+	atomic.StoreUint32(&s.prevBufferLen, 0)
 	if 0 == l {
 		s.Emit("drain")
 	} else {
@@ -481,7 +488,7 @@ func (s *Socket) flush() {
 		s.Transport().Send(packets)
 		// keep track of current length of writeBuffer
 		// splice writeBuffer and callbackBuffer on `drain`
-		s.prevBufferLen = packets_len
+		atomic.StoreUint32(&s.prevBufferLen, packets_len)
 		s.Emit("flush")
 	}
 }
@@ -565,7 +572,7 @@ func (s *Socket) Close() *Socket {
 		l := len(s.writeBuffer)
 		s.muwriteBuffer.RUnlock()
 		if l > 0 {
-			s.Once("drain", func() {
+			s.Once("drain", func(...any) {
 				if s.Upgrading() {
 					waitForUpgrade()
 				} else {
@@ -584,7 +591,7 @@ func (s *Socket) Close() *Socket {
 // Called upon transport error
 func (s *Socket) onError(err error) {
 	client_socket_log.Debug("socket error %v", err)
-	SocketState.set(false)
+	PriorWebsocketSuccess.Set(false)
 	s.Emit("error", err)
 	s.onClose("transport error", err)
 }
@@ -593,8 +600,10 @@ func (s *Socket) onError(err error) {
 func (s *Socket) onClose(reason string, description error) {
 	if readyState := s.readyState(); "opening" == readyState || "open" == readyState || "closing" == readyState {
 		client_socket_log.Debug(`socket close with reason: "%s"`, reason)
+		s.mupingTimeoutTimer.RLock()
 		// clear timers
 		utils.ClearTimeout(s.pingTimeoutTimer)
+		s.mupingTimeoutTimer.RUnlock()
 
 		s.mutransport.RLock()
 		// stop event from firing again for transport
@@ -605,11 +614,12 @@ func (s *Socket) onClose(reason string, description error) {
 		s.transport.Clear()
 		s.mutransport.RUnlock()
 
-		// removeEventListener("offline", s.offlineEventListener, false);
 		// set ready state
 		s.setReadyState("closed")
 		// clear session id
+		s.muid.Lock()
 		s.id = ""
+		s.muid.Unlock()
 		// emit close event
 		s.Emit("close", reason, description)
 		// clean buffers after, so users can still
@@ -617,13 +627,13 @@ func (s *Socket) onClose(reason string, description error) {
 		s.muwriteBuffer.Lock()
 		s.writeBuffer = s.writeBuffer[:0]
 		s.muwriteBuffer.Unlock()
-		s.prevBufferLen = 0
+		atomic.StoreUint32(s.prevBufferLen, 0)
 	}
 }
 
 // Filters upgrades, returning only those matching client transports.
 func (s *Socket) filterUpgrades(upgrades []string) *types.Set[string] {
-	filteredUpgrades := *types.NewSet[string]()
+	filteredUpgrades := types.NewSet[string]()
 	for _, upgrade := range upgrades {
 		if s.transports.Has(upgrade) {
 			filteredUpgrades.Add(upgrade)
