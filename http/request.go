@@ -3,21 +3,20 @@ package http
 import (
 	"compress/flate"
 	"compress/gzip"
+	"crypto/tls"
 	"io"
 	"net/http"
-	"net/url"
 	"strings"
 	"time"
 
 	"github.com/andybalholm/brotli"
-	"github.com/zishang520/engine.io/events"
 	"github.com/zishang520/engine.io/types"
 )
 
 type Response struct {
 	*http.Response
 
-	BodyBuffer *bytes.Buffer
+	BodyBuffer types.BufferInterface
 }
 
 type Options struct {
@@ -45,7 +44,7 @@ func NewRequest(uri string, opts *Options) (*Response, error) {
 	return r.create()
 }
 
-func (r *Request) create() {
+func (r *Request) create() (res *Response, _ error) {
 	client := &http.Client{}
 	if r.options.Jar != nil {
 		client.Jar = r.options.Jar

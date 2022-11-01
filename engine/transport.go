@@ -33,7 +33,7 @@ type Transport struct {
 }
 
 // Transport abstract constructor.
-func NewTransport(opts config.SocketOptionsInterface) {
+func NewTransport(opts config.SocketOptionsInterface) *Transport {
 	t := &Transport{}
 
 	t.EventEmitter = events.New()

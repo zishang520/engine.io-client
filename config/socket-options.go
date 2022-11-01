@@ -2,9 +2,9 @@ package config
 
 import (
 	"crypto/tls"
-	"net/url"
 	"time"
 
+	"github.com/zishang520/engine.io/types"
 	"github.com/zishang520/engine.io/utils"
 )
 

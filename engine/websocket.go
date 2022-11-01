@@ -4,12 +4,14 @@ import (
 	"errors"
 	"net/http"
 	"net/url"
+	"sync"
 	"time"
 
 	"github.com/gorilla/websocket"
 	"github.com/zishang520/engine.io-client/config"
 	"github.com/zishang520/engine.io-client/utils"
 	"github.com/zishang520/engine.io/log"
+	"github.com/zishang520/engine.io/packet"
 )
 
 var client_websocket_log = log.NewLog("engine.io-client:websocket")
@@ -22,7 +24,7 @@ type WS struct {
 }
 
 // WebSocket transport constructor.
-func NewWS(opts config.SocketOptionsInterface) {
+func NewWS(opts config.SocketOptionsInterface) *WS {
 	p := &WS{}
 	p.Transport = NewTransport(opts)
 	p.supportsBinary = !opts.ForceBase64()

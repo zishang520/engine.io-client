@@ -1,7 +1,6 @@
 package utils
 
 import (
-	"math"
 	"sync"
 	"sync/atomic"
 	"time"

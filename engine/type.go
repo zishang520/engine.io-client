@@ -3,6 +3,7 @@ package engine
 import (
 	"github.com/zishang520/engine.io/packet"
 	"github.com/zishang520/engine.io/types"
+	"github.com/zishang520/engine.io/utils"
 )
 
 type TransportInterface interface {

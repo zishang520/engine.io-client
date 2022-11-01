@@ -24,7 +24,7 @@ type Polling struct {
 }
 
 // XHR Polling constructor.
-func NewPolling(opts config.SocketOptionsInterface) {
+func NewPolling(opts config.SocketOptionsInterface) *Polling {
 	p := &Polling{}
 	p.Transport = NewTransport(opts)
 	p._polling = false
@@ -38,13 +38,13 @@ func NewPolling(opts config.SocketOptionsInterface) {
 	return p
 }
 
-func (t *Transport) setPolling(polling bool) {
+func (t *Polling) setPolling(polling bool) {
 	t.mu_polling.Lock()
 	defer t.mu_polling.Unlock()
 
 	t._polling = polling
 }
-func (t *Transport) polling() bool {
+func (t *Polling) polling() bool {
 	t.mu_polling.RLock()
 	defer t.mu_polling.RUnlock()
 

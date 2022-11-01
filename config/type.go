@@ -1,5 +1,13 @@
 package config
 
+import (
+	"crypto/tls"
+	"time"
+
+	"github.com/zishang520/engine.io/types"
+	"github.com/zishang520/engine.io/utils"
+)
+
 type SocketOptionsInterface interface {
 	Host() string
 	GetRawHost() *string

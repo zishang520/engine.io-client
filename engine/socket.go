@@ -2,6 +2,7 @@ package engine
 
 import (
 	"errors"
+	"io"
 	"net/url"
 	"os"
 	"os/signal"
@@ -13,6 +14,7 @@ import (
 	"github.com/zishang520/engine.io-client/config"
 	"github.com/zishang520/engine.io/events"
 	"github.com/zishang520/engine.io/log"
+	"github.com/zishang520/engine.io/packet"
 	"github.com/zishang520/engine.io/parser"
 	"github.com/zishang520/engine.io/types"
 	"github.com/zishang520/engine.io/utils"
@@ -41,9 +43,8 @@ func (ss *priorWebsocketSuccess) Set(state bool) {
 
 var (
 	PriorWebsocketSuccess *priorWebsocketSuccess = &priorWebsocketSuccess{}
+	Protocol              int                    = parser.Parserv4().Protocol()
 )
-
-const Protocol int = parser.Parserv4().Protocol()
 
 type Socket struct {
 	events.EventEmitter
