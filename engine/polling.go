@@ -2,6 +2,7 @@ package engine
 
 import (
 	"errors"
+	"fmt"
 	"net/http"
 	"net/url"
 	"strings"
@@ -215,7 +216,7 @@ func (p *Polling) request(opts *_http.Options) (*_http.Response, error) {
 	}
 	opts.Timeout = p.opts.RequestTimeout()
 	opts.TLSClientConfig = p.opts.TLSClientConfig()
-	return NewRequest(p.uri(), opts)
+	return _http.NewRequest(p.uri(), opts)
 }
 
 // Sends data.
@@ -242,5 +243,5 @@ func (p *Polling) doPoll() {
 	if res.StatusCode != http.StatusOK {
 		p.onError("xhr poll error", errors.New(fmt.Sprintf("%s", res.StatusCode)))
 	}
-	t.onData(res.BodyBuffer)
+	p.onData(res.BodyBuffer)
 }
