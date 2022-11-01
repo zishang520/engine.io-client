@@ -70,6 +70,7 @@ type Socket struct {
 	mu_readyState sync.RWMutex
 	mutransport   sync.RWMutex
 	muupgrading   sync.RWMutex
+	muwriteBuffer sync.RWMutex
 }
 
 func (s *Socket) Upgrading() bool {
@@ -230,8 +231,10 @@ func (s *Socket) open() {
 
 // Sets the current transport. Disables the existing one (if any).
 func (s *Socket) setTransport(transport TransportInterface) {
+	client_socket_log.Debug("setting transport %s", transport.Name())
 	s.mutransport.RLock()
 	if s.transport != nil {
+		client_socket_log.Debug("clearing existing transport %s", s.transport.Name())
 		s.transport.RemoveAllListeners()
 	}
 	s.mutransport.RUnlock()
@@ -250,6 +253,7 @@ func (s *Socket) setTransport(transport TransportInterface) {
 
 // Probes a transport.
 func (s *Socket) probe(name string) {
+	client_socket_log.Debug(`probing transport "%s"`, name)
 	transport, err := s.createTransport(name)
 	if err != nil {
 		return
@@ -260,6 +264,7 @@ func (s *Socket) probe(name string) {
 		if atomic.LoadInt32(&failed) == 1 {
 			return
 		}
+		client_socket_log.Debug(`probe transport "%s" opened`, name)
 		transport.Send([]*packet.Packet{
 			&packet.Packet{
 				Type: packet.PING,
@@ -275,6 +280,7 @@ func (s *Socket) probe(name string) {
 			io.Copy(sb, data.Data)
 
 			if packet.PONG == msg.Type && "probe" == sb.String() {
+				client_socket_log.Debug(`probe transport "%s" pong`, name)
 				s.muupgrading.Lock()
 				s.upgrading = true
 				s.muupgrading.Unlock()
@@ -283,6 +289,7 @@ func (s *Socket) probe(name string) {
 					return
 				}
 				SocketState.set("websocket" == transport.Name())
+				client_socket_log.Debug(`pausing current transport "%s"`, s.Transport().Name())
 				s.Transport().pause(func() {
 					if atomic.LoadInt32(&failed) == 1 {
 						return
@@ -290,6 +297,7 @@ func (s *Socket) probe(name string) {
 					if "closed" == s.readyState() {
 						return
 					}
+					client_socket_log.Debug("changing transport and sending upgrade packet")
 					cleanup()
 					s.setTransport(transport)
 					transport.Send([]*packet.Packet{
@@ -305,6 +313,7 @@ func (s *Socket) probe(name string) {
 					s.flush()
 				})
 			} else {
+				client_socket_log.Debug(`probe transport "%s" failed`, name)
 				s.Emit("upgradeError", errors.New("["+transport.Name()+"] probe error"))
 			}
 		})
@@ -322,6 +331,7 @@ func (s *Socket) probe(name string) {
 		onerror := func(err string) {
 			e := errors.New("[" + transport.Name() + "] probe error: " + err)
 			freezeTransport()
+			client_socket_log.Debug(`probe transport "%s" failed because of error: %s`, name, e.Error())
 			this.Emit("upgradeError", e)
 		}
 		onTransportClose := func(...any) {
@@ -333,6 +343,7 @@ func (s *Socket) probe(name string) {
 		}
 		onupgrade := func(to TransportInterface) {
 			if transport != nil && to.Name() != transport.Name() {
+				client_socket_log.Debug(`"%s" works - aborting "%s"`, to.Name(), transport.Name())
 				freezeTransport()
 			}
 		}
@@ -355,6 +366,7 @@ func (s *Socket) probe(name string) {
 
 // Called when connection is deemed open.
 func (s *Socket) onOpen() {
+	client_socket_log.Debug("socket open")
 	s.setReadyStat("open")
 	priorWebsocketSuccess.set("websocket" == s.Transport().Name())
 	s.Emit("open")
@@ -362,6 +374,7 @@ func (s *Socket) onOpen() {
 	// we check for `readyState` in case an `open`
 	// listener already closed the socket
 	if "open" == s.readyState() && s.opts.Upgrade() && s.Transport().hasPause() {
+		client_socket_log.Debug("starting upgrade probes")
 		for _, upgrade := range s.upgrades.Key() {
 			s.probe(upgrade)
 		}
@@ -371,7 +384,7 @@ func (s *Socket) onOpen() {
 // Handles a packet.
 func (s *Socket) onPacket(msg *packet.Packet) {
 	if readyState := s.readyState(); "opening" == readyState || "open" == readyState || "closing" == readyState {
-		// debug('socket receive: type "%s", data "%s"', msg.type, msg.data);
+		client_socket_log.Debug(`socket receive: type "%s", data "%v"`, msg.Type, msg.Data)
 		s.Emit("packet", msg)
 		// Socket is live - any packet counts
 		s.Emit("heartbeat")
@@ -384,14 +397,13 @@ func (s *Socket) onPacket(msg *packet.Packet) {
 			s.Emit("ping")
 			s.Emit("pong")
 		case packet.ERROR:
-			err := errors.New("server error")
-			s.onError(err)
+			s.onError(errors.New("server error"))
 		case packet.MESSAGE:
 			s.Emit("data", msg.Data)
 			s.Emit("message", msg.Data)
 		}
 	} else {
-		// debug('packet received with socket readyState "%s"', this.readyState);
+		client_socket_log.Debug(`packet received with socket readyState "%s"`, readyState)
 	}
 }
 
@@ -441,12 +453,15 @@ func (s *Socket) resetPingTimeout() {
 
 // Called on `drain` event
 func (s *Socket) onDrain() {
+	s.muwriteBuffer.Lock()
 	s.writeBuffer = s.writeBuffer[s.prevBufferLen:]
+	l := len(s.writeBuffer)
+	s.muwriteBuffer.Unlock()
 	// setting prevBufferLen = 0 is very important
 	// for example, when upgrading, upgrade packet is sent over,
 	// and a nonzero prevBufferLen could cause problems on `drain`
 	s.prevBufferLen = 0
-	if 0 == len(s.writeBuffer) {
+	if 0 == l {
 		s.Emit("drain")
 	} else {
 		s.flush()
@@ -455,23 +470,29 @@ func (s *Socket) onDrain() {
 
 // Flush write buffers.
 func (s *Socket) flush() {
-	if "closed" != s.readyState() && s.Transport().writable() && !s.Upgrading() && len(s.writeBuffer) > 0 {
+	s.muwriteBuffer.RLock()
+	l := len(s.writeBuffer)
+	s.muwriteBuffer.RUnlock()
+
+	if "closed" != s.readyState() && s.Transport().writable() && !s.Upgrading() && l > 0 {
 		packets := s.getWritablePackets()
-		// debug("flushing %d packets in socket", packets.length)
+		packets_len := len(packets)
+		client_socket_log.Debug("flushing %d packets in socket", packets_len)
 		s.Transport().Send(packets)
 		// keep track of current length of writeBuffer
 		// splice writeBuffer and callbackBuffer on `drain`
-		s.prevBufferLen = len(packets)
+		s.prevBufferLen = packets_len
 		s.Emit("flush")
 	}
 }
 
 // Ensure the encoded size of the writeBuffer is below the maxPayload value sent by the server (only for HTTP
 func (s *Socket) getWritablePackets() []*packet.Packet {
-	shouldCheckPayloadSize := s.maxPayload &&
-		s.Transport().Name() == "polling" &&
-		len(s.writeBuffer) > 1
-	if !shouldCheckPayloadSize {
+	s.muwriteBuffer.RLock()
+	defer s.muwriteBuffer.RUnlock()
+
+	l := len(s.writeBuffer)
+	if !(s.maxPayload && s.Transport().Name() == "polling" && l > 1) {
 		return s.writeBuffer
 	}
 	payloadSize := 1 // first packet type
@@ -480,27 +501,27 @@ func (s *Socket) getWritablePackets() []*packet.Packet {
 			payloadSize += data.Len()
 		}
 		if i > 0 && payloadSize > s.maxPayload {
-			// debug("only send %d out of %d packets", i, s.writeBuffer.length)
+			client_socket_log.Debug("only send %d out of %d packets", i, l)
 			return s.writeBuffer[0:i]
 		}
 		payloadSize += 2 // separator + packet type
 	}
-	// debug("payload size is %d (max: %d)", payloadSize, s.maxPayload);
+	client_socket_log.Debug("payload size is %d (max: %d)", payloadSize, s.maxPayload)
 	return s.writeBuffer
 }
 
 // Sends a message.
-func (s *Socket) Write(msg io.Reader, options *packet.Options, fn any) *Socket {
+func (s *Socket) Write(msg io.Reader, options *packet.Options, fn func()) *Socket {
 	s.sendPacket("message", msg, options, fn)
 	return s
 }
-func (s *Socket) Send(msg io.Reader, options *packet.Options, fn any) *Socket {
+func (s *Socket) Send(msg io.Reader, options *packet.Options, fn func()) *Socket {
 	s.sendPacket("message", msg, options, fn)
 	return s
 }
 
 // Sends a packet.
-func (s *Socket) sendPacket(t string, data io.Reader, options *packet.Options, fn any) {
+func (s *Socket) sendPacket(t string, data io.Reader, options *packet.Options, fn func()) {
 	if readyState := s.readyState(); "closing" == readyState || "closed" == readyState {
 		return
 	}
@@ -510,9 +531,13 @@ func (s *Socket) sendPacket(t string, data io.Reader, options *packet.Options, f
 		Options: options,
 	}
 	s.Emit("packetCreate", packet)
+	s.muwriteBuffer.Lock()
 	s.writeBuffer = append(s.writeBuffer, packet)
+	s.muwriteBuffer.Unlock()
 	if fn != nil {
-		s.Once("flush", fn)
+		s.Once("flush", func(...any) {
+			fn()
+		})
 	}
 	s.flush()
 }
@@ -521,7 +546,7 @@ func (s *Socket) sendPacket(t string, data io.Reader, options *packet.Options, f
 func (s *Socket) Close() *Socket {
 	close := func() {
 		s.onClose("forced close", nil)
-		// debug("socket closing - telling transport to close")
+		client_socket_log.Debug("socket closing - telling transport to close")
 		s.Transport().Close()
 	}
 	cleanupAndClose := func(...any) {
@@ -536,7 +561,10 @@ func (s *Socket) Close() *Socket {
 	}
 	if readyState := s.readyState(); "opening" == readyState || "open" == readyState {
 		s.setReadyState("closing")
-		if len(s.writeBuffer) > 0 {
+		s.muwriteBuffer.RLock()
+		l := len(s.writeBuffer)
+		s.muwriteBuffer.RUnlock()
+		if l > 0 {
 			s.Once("drain", func() {
 				if s.Upgrading() {
 					waitForUpgrade()
@@ -555,7 +583,7 @@ func (s *Socket) Close() *Socket {
 
 // Called upon transport error
 func (s *Socket) onError(err error) {
-	// debug("socket error %j", err)
+	client_socket_log.Debug("socket error %v", err)
 	SocketState.set(false)
 	s.Emit("error", err)
 	s.onClose("transport error", err)
@@ -564,7 +592,7 @@ func (s *Socket) onError(err error) {
 // Called upon transport close.
 func (s *Socket) onClose(reason string, description error) {
 	if readyState := s.readyState(); "opening" == readyState || "open" == readyState || "closing" == readyState {
-		// debug('socket close with reason: "%s"', reason);
+		client_socket_log.Debug(`socket close with reason: "%s"`, reason)
 		// clear timers
 		utils.ClearTimeout(s.pingTimeoutTimer)
 
@@ -586,7 +614,9 @@ func (s *Socket) onClose(reason string, description error) {
 		s.Emit("close", reason, description)
 		// clean buffers after, so users can still
 		// grab the buffers on `close` event
+		s.muwriteBuffer.Lock()
 		s.writeBuffer = s.writeBuffer[:0]
+		s.muwriteBuffer.Unlock()
 		s.prevBufferLen = 0
 	}
 }

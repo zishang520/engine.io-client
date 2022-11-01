@@ -117,7 +117,7 @@ func (t *Transport) onOpen() {
 }
 
 // Called with data.
-func (t *Transport) onData(data RawData) {
+func (t *Transport) onData(data types.BufferInterface) {
 	p, _ := parser.Parserv4().DecodePacket(data)
 	t.onPacket(packet)
 }
