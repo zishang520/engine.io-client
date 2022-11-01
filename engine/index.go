@@ -18,7 +18,7 @@ var _transports map[string]*transports = map[string]*transports{
 
 	"websocket": &transports{
 		New: func(opts config.SocketOptionsInterface) TransportInterface {
-			return NewWS(ctx)
+			return NewWS(opts)
 		},
 	},
 }

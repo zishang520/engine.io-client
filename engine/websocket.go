@@ -12,6 +12,7 @@ import (
 	"github.com/zishang520/engine.io-client/utils"
 	"github.com/zishang520/engine.io/log"
 	"github.com/zishang520/engine.io/packet"
+	"github.com/zishang520/engine.io/types"
 )
 
 var client_websocket_log = log.NewLog("engine.io-client:websocket")
@@ -145,7 +146,7 @@ func (w *WS) _write(packets []*packet.Packet) {
 	}
 }
 
-func (w *websocket) send(ws *websocket.Conn, data types.BufferInterface, compress bool) {
+func (w *WS) send(ws *websocket.Conn, data types.BufferInterface, compress bool) {
 	ws.EnableWriteCompression(compress)
 	mt := websocket.BinaryMessage
 	if _, ok := data.(*types.StringBuffer); ok {
@@ -187,12 +188,12 @@ func (w *WS) _doClose() {
 
 // Generates uri for connection.
 func (w *WS) uri() string {
-	url := &url.URL{
+	_url := &url.URL{
 		Path:   p.opts.Path(),
 		Scheme: "ws",
 	}
 	if p.opts.Secure() {
-		url.Scheme = "wss"
+		_url.Scheme = "wss"
 	}
 	query := url.Values(p.query.All())
 	// cache busting is forced
@@ -202,7 +203,7 @@ func (w *WS) uri() string {
 	if !p.supportsBinary {
 		query.Set(b64, "1")
 	}
-	url.RawQuery = query.Encode()
+	_url.RawQuery = query.Encode()
 	host := ""
 	if strings.Index(p.opts.Hostname(), ":") > -1 {
 		host += "[" + p.opts.Hostname() + "]"
@@ -211,9 +212,9 @@ func (w *WS) uri() string {
 	}
 	port := ""
 	// avoid port if default for schema
-	if p.opts.Port() && (("wss" == url.Scheme && p.opts.Port() != "443") || ("ws" == url.Scheme && p.opts.Port() != "80")) {
+	if p.opts.Port() != "" && (("wss" == _url.Scheme && p.opts.Port() != "443") || ("ws" == _url.Scheme && p.opts.Port() != "80")) {
 		port = ":" + p.opts.Port()
 	}
-	url.Host = host + port
-	return url.String()
+	_url.Host = host + port
+	return _url.String()
 }

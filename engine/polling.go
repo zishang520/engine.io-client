@@ -4,7 +4,9 @@ import (
 	"errors"
 	"net/http"
 	"net/url"
+	"strings"
 	"sync"
+	"sync/atomic"
 
 	"github.com/zishang520/engine.io-client/config"
 	_http "github.com/zishang520/engine.io-client/http"
@@ -12,6 +14,8 @@ import (
 	"github.com/zishang520/engine.io/events"
 	"github.com/zishang520/engine.io/log"
 	"github.com/zishang520/engine.io/packet"
+	"github.com/zishang520/engine.io/parser"
+	"github.com/zishang520/engine.io/types"
 )
 
 var client_polling_log = log.NewLog("engine.io-client:polling")
@@ -128,14 +132,14 @@ func (p *Polling) onData(data types.BufferInterface) {
 		p._onPacket(packetData)
 	}
 	// if an event did not trigger closing
-	if "closed" != p.readyState() {
+	if readyState := p.readyState(); "closed" != readyState {
 		// if we got data we're not polling
 		p.setPolling(false)
 		p.Emit("pollComplete")
-		if "open" == p.readyState() {
+		if "open" == readyState {
 			p.Poll()
 		} else {
-			client_polling_log.Debug(`ignoring poll - transport state "%s"`, this.readyState)
+			client_polling_log.Debug(`ignoring poll - transport state "%s"`, readyState)
 		}
 	}
 }
@@ -144,41 +148,41 @@ func (p *Polling) onData(data types.BufferInterface) {
 func (p *Polling) _doClose() {
 	_close := events.Listener(func(...any) {
 		client_polling_log.Debug("writing close packet")
-		t.write([]*packet.Packet{
+		p.write([]*packet.Packet{
 			&packet.Packet{
 				Type: packet.CLOSE,
 			},
 		})
 	})
-	if "open" == t.readyState() {
+	if "open" == p.readyState() {
 		client_polling_log.Debug("transport open - closing")
 		_close()
 	} else {
 		// in case we're trying to close while
 		// handshaking is in progress (GH-164)
 		client_polling_log.Debug("transport not open - deferring close")
-		t.Once("open", _close)
+		p.Once("open", _close)
 	}
 }
 
 // Writes a packets payload.
 func (p *Polling) _write(packets []*packet.Packet) {
-	t.setWritable(false)
+	p.setWritable(false)
 	data, _ := parser.Parserv4().EncodePayload(packets)
-	go t.doWrite(data, func() {
-		t.setWritable(true)
-		t.Emit("drain")
+	go p.doWrite(data, func() {
+		p.setWritable(true)
+		p.Emit("drain")
 	})
 }
 
 // Generates uri for connection.
 func (p *Polling) uri() string {
-	url := &url.URL{
+	_url := &url.URL{
 		Path:   p.opts.Path(),
 		Scheme: "http",
 	}
 	if p.opts.Secure() {
-		url.Scheme = "https"
+		_url.Scheme = "https"
 	}
 	query := url.Values(p.query.All())
 	// cache busting is forced
@@ -186,9 +190,9 @@ func (p *Polling) uri() string {
 		query.Set(p.opts.TimestampParam(), utils.YeastDate())
 	}
 	if !p.supportsBinary && !query.Has("sid") {
-		query.Set(b64, "1")
+		query.Set("b64", "1")
 	}
-	url.RawQuery = query.Encode()
+	_url.RawQuery = query.Encode()
 	host := ""
 	if strings.Index(p.opts.Hostname(), ":") > -1 {
 		host += "[" + p.opts.Hostname() + "]"
@@ -197,11 +201,11 @@ func (p *Polling) uri() string {
 	}
 	port := ""
 	// avoid port if default for schema
-	if p.opts.Port() && (("https" == url.Scheme && p.opts.Port() != "443") || ("http" == url.Scheme && p.opts.Port() != "80")) {
+	if p.opts.Port() != "" && (("https" == _url.Scheme && p.opts.Port() != "443") || ("http" == _url.Scheme && p.opts.Port() != "80")) {
 		port = ":" + p.opts.Port()
 	}
-	url.Host = host + port
-	return url.String()
+	_url.Host = host + port
+	return _url.String()
 }
 
 // Creates a request.
