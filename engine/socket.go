@@ -6,6 +6,8 @@ import (
 	"net/url"
 	"os"
 	"os/signal"
+	"strconv"
+	"strings"
 	"sync"
 	"sync/atomic"
 	"syscall"
@@ -109,16 +111,18 @@ func NewSocket(uri string, opts config.SocketOptionsInterface) *Socket {
 	s.EventEmitter = events.New()
 
 	if uri != "" {
-		_url := url.Parse(uri)
-		opts.SetHostname(_url.Hostname())
-		opts.SetSecure(_url.Scheme == "https" || _url.Scheme == "wss")
-		opts.SetPort(_url.Port())
-		if _url.RawQuery != "" {
-			opts.SetQuery(utils.NewParameterBag(_url.Query()))
+		if _url, err := url.Parse(uri); err == nil {
+			opts.SetHostname(_url.Hostname())
+			opts.SetSecure(_url.Scheme == "https" || _url.Scheme == "wss")
+			opts.SetPort(_url.Port())
+			if _url.RawQuery != "" {
+				opts.SetQuery(utils.NewParameterBag(_url.Query()))
+			}
 		}
 	} else if opts.Host() != "" {
-		_url := url.Parse(opts.Host())
-		opts.SetHostname(_url.Hostname())
+		if _url, err := url.Parse(opts.Host()); err == nil {
+			opts.SetHostname(_url.Hostname())
+		}
 	}
 
 	s.secure = opts.Secure()
@@ -148,7 +152,7 @@ func NewSocket(uri string, opts config.SocketOptionsInterface) *Socket {
 	s._readyState = ""
 	s.writeBuffer = []*packet.Packet{}
 	s.prevBufferLen = 0
-	_opts = config.DefaultSocketOptions()
+	_opts := config.DefaultSocketOptions()
 	_opts.SetPerMessageDeflate(&config.PerMessageDeflate{1024})
 	s.opts = _opts.Assign(opts)
 	s.opts.SetPath(strings.TrimRight(s.opts.Path(), "/") + "/")
@@ -157,12 +161,12 @@ func NewSocket(uri string, opts config.SocketOptionsInterface) *Socket {
 		signalC := make(chan os.Signal)
 		signal.Notify(signalC, os.Interrupt, syscall.SIGTERM)
 		go func() {
-			for s := range signalC {
-				switch s {
+			for c := range signalC {
+				switch c {
 				case os.Interrupt, syscall.SIGTERM:
 					if transport := s.Transport(); transport != nil {
 						// silently close the transport
-						transport.RemoveAllListeners()
+						transport.Clear()
 						transport.Close()
 					}
 					return
@@ -172,6 +176,7 @@ func NewSocket(uri string, opts config.SocketOptionsInterface) *Socket {
 		// network
 	}
 	s.open()
+	return s
 }
 
 // Creates transport of the given type.
@@ -179,7 +184,7 @@ func (s *Socket) createTransport(name string) (TransportInterface, error) {
 	client_socket_log.Debug(`creating transport "%s"`, name)
 	query := utils.NewParameterBag(s.opts.Query().All())
 	// append engine.io protocol identifier
-	query.Set("EIO", parser.Parserv4().Protocol())
+	query.Set("EIO", strconv.FormatInt(int64(Protocol), 10))
 	// transport name
 	query.Set("transport", name)
 	// session id if we already have one
@@ -238,7 +243,7 @@ func (s *Socket) setTransport(transport TransportInterface) {
 	s.mutransport.RLock()
 	if s.transport != nil {
 		client_socket_log.Debug("clearing existing transport %s", s.transport.Name())
-		s.transport.RemoveAllListeners()
+		s.transport.Clear()
 	}
 	s.mutransport.RUnlock()
 
@@ -278,9 +283,9 @@ func (s *Socket) probe(name string) {
 			if atomic.LoadInt32(&failed) == 1 {
 				return
 			}
-			msg := msg[0].(*packet.Packet)
+			msg := msgs[0].(*packet.Packet)
 			sb := new(strings.Builder)
-			io.Copy(sb, data.Data)
+			io.Copy(sb, msg.Data)
 
 			if packet.PONG == msg.Type && "probe" == sb.String() {
 				client_socket_log.Debug(`probe transport "%s" pong`, name)

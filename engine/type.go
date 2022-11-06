@@ -1,12 +1,15 @@
 package engine
 
 import (
+	"github.com/zishang520/engine.io/events"
 	"github.com/zishang520/engine.io/packet"
 	"github.com/zishang520/engine.io/types"
 	"github.com/zishang520/engine.io/utils"
 )
 
 type TransportInterface interface {
+	events.EventEmitter
+
 	// Transport name.
 	Name() string
 	// Query
