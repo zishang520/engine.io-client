@@ -267,8 +267,9 @@ func (s *Socket) probe(name string) {
 		return
 	}
 	PriorWebsocketSuccess.Set(false)
+	var cleanup func()
 	failed := int32(0)
-	onTransportOpen := func() {
+	onTransportOpen := func(...any) {
 		if atomic.LoadInt32(&failed) == 1 {
 			return
 		}
@@ -325,51 +326,51 @@ func (s *Socket) probe(name string) {
 				s.Emit("upgradeError", errors.New("["+transport.Name()+"] probe error"))
 			}
 		})
-		freezeTransport := func() {
-			if atomic.LoadInt32(&failed) == 1 {
-				return
-			}
-			// Any callback called by transport should be ignored since now
-			StoreInt32(&failed, 1)
-			cleanup()
-			transport.Close()
-			transport = nil
-		}
-		// Handle any error that happens while probing
-		onerror := func(err string) {
-			e := errors.New("[" + transport.Name() + "] probe error: " + err)
-			freezeTransport()
-			client_socket_log.Debug(`probe transport "%s" failed because of error: %s`, name, e.Error())
-			this.Emit("upgradeError", e)
-		}
-		onTransportClose := func(...any) {
-			onerror("transport closed")
-		}
-		// When the socket is closed while we're probing
-		onclose := func(...any) {
-			onerror("socket closed")
-		}
-		onupgrade := func(to TransportInterface) {
-			if transport != nil && to.Name() != transport.Name() {
-				client_socket_log.Debug(`"%s" works - aborting "%s"`, to.Name(), transport.Name())
-				freezeTransport()
-			}
-		}
-		// Remove all listeners on the transport and on self
-		cleanup := func() {
-			transport.RemoveListener("open", onTransportOpen)
-			transport.RemoveListener("error", onerror)
-			transport.RemoveListener("close", onTransportClose)
-			s.RemoveListener("close", onclose)
-			s.RemoveListener("upgrading", onupgrade)
-		}
-		transport.Once("open", onTransportOpen)
-		transport.Once("error", onerror)
-		transport.Once("close", onTransportClose)
-		s.Once("close", onclose)
-		s.Once("upgrading", onupgrade)
-		transport.Open()
 	}
+	freezeTransport := func() {
+		if atomic.LoadInt32(&failed) == 1 {
+			return
+		}
+		// Any callback called by transport should be ignored since now
+		atomic.StoreInt32(&failed, 1)
+		cleanup()
+		transport.Close()
+		transport = nil
+	}
+	// Handle any error that happens while probing
+	onerror := func(errs ...any) {
+		e := errors.New("[" + transport.Name() + "] probe error: " + errs[0].(error).Error())
+		freezeTransport()
+		client_socket_log.Debug(`probe transport "%s" failed because of error: %s`, name, e.Error())
+		s.Emit("upgradeError", e)
+	}
+	onTransportClose := func(...any) {
+		onerror(errors.New("transport closed"))
+	}
+	// When the socket is closed while we're probing
+	onclose := func(...any) {
+		onerror(errors.New("socket closed"))
+	}
+	onupgrade := func(tos ...any) {
+		if to, ok := tos[0].(TransportInterface); ok && to != nil && transport != nil && to.Name() != transport.Name() {
+			client_socket_log.Debug(`"%s" works - aborting "%s"`, to.Name(), transport.Name())
+			freezeTransport()
+		}
+	}
+	// Remove all listeners on the transport and on self
+	cleanup = func() {
+		transport.RemoveListener("open", onTransportOpen)
+		transport.RemoveListener("error", onerror)
+		transport.RemoveListener("close", onTransportClose)
+		s.RemoveListener("close", onclose)
+		s.RemoveListener("upgrading", onupgrade)
+	}
+	transport.Once("open", onTransportOpen)
+	transport.Once("error", onerror)
+	transport.Once("close", onTransportClose)
+	s.Once("close", onclose)
+	s.Once("upgrading", onupgrade)
+	transport.Open()
 }
 
 // Called when connection is deemed open.
