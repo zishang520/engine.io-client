@@ -1,6 +1,7 @@
 package engine
 
 import (
+	"encoding/json"
 	"errors"
 	"io"
 	"net/url"
@@ -376,15 +377,15 @@ func (s *Socket) probe(name string) {
 // Called when connection is deemed open.
 func (s *Socket) onOpen() {
 	client_socket_log.Debug("socket open")
-	s.setReadyStat("open")
-	priorWebsocketSuccess.set("websocket" == s.Transport().Name())
+	s.setReadyState("open")
+	PriorWebsocketSuccess.Set("websocket" == s.Transport().Name())
 	s.Emit("open")
 	s.flush()
 	// we check for `readyState` in case an `open`
 	// listener already closed the socket
 	if "open" == s.readyState() && s.opts.Upgrade() && s.Transport().hasPause() {
 		client_socket_log.Debug("starting upgrade probes")
-		for _, upgrade := range s.upgrades.Key() {
+		for _, upgrade := range s.upgrades.Keys() {
 			s.probe(upgrade)
 		}
 	}
@@ -402,7 +403,7 @@ func (s *Socket) onPacket(msg *packet.Packet) {
 			s.onHandshake(msg.Data)
 		case packet.PING:
 			s.resetPingTimeout()
-			s.sendPacket("pong")
+			s.sendPacket(packet.PONG, nil, nil, nil)
 			s.Emit("ping")
 			s.Emit("pong")
 		case packet.ERROR:
@@ -440,8 +441,8 @@ func (s *Socket) onHandshake(data io.Reader) {
 	s.muid.Unlock()
 	s.Transport().Query().Set("sid", msg.Sid)
 	s.upgrades = s.filterUpgrades(msg.Upgrades)
-	s.pingInterval = msg.PingInterval * time.Millisecond
-	s.pingTimeout = msg.PingTimeout * time.Millisecond
+	s.pingInterval = time.Duration(msg.PingInterval) * time.Millisecond
+	s.pingTimeout = time.Duration(msg.PingTimeout) * time.Millisecond
 	s.maxPayload = msg.MaxPayload
 	s.onOpen()
 	// In case open handler closes socket
@@ -526,16 +527,16 @@ func (s *Socket) getWritablePackets() []*packet.Packet {
 
 // Sends a message.
 func (s *Socket) Write(msg io.Reader, options *packet.Options, fn func()) *Socket {
-	s.sendPacket("message", msg, options, fn)
+	s.sendPacket(packet.MESSAGE, msg, options, fn)
 	return s
 }
 func (s *Socket) Send(msg io.Reader, options *packet.Options, fn func()) *Socket {
-	s.sendPacket("message", msg, options, fn)
+	s.sendPacket(packet.MESSAGE, msg, options, fn)
 	return s
 }
 
 // Sends a packet.
-func (s *Socket) sendPacket(t string, data io.Reader, options *packet.Options, fn func()) {
+func (s *Socket) sendPacket(t packet.Type, data io.Reader, options *packet.Options, fn func()) {
 	if readyState := s.readyState(); "closing" == readyState || "closed" == readyState {
 		return
 	}
