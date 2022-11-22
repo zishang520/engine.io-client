@@ -36,12 +36,15 @@ type TransportInterface interface {
 	doOpen()
 	doClose()
 	write([]*packet.Packet)
+
+	setWritable(bool)
+	writable() bool
 }
 
 type HandshakeData struct {
 	Sid          string   `json:"sid"`
 	Upgrades     []string `json:"upgrades"`
-	PingInterval int64    `json:"pingInterval"`
-	PingTimeout  int64    `json:"pingTimeout"`
-	MaxPayload   int64    `json:"maxPayload"`
+	PingInterval uint64   `json:"pingInterval"`
+	PingTimeout  uint64   `json:"pingTimeout"`
+	MaxPayload   uint64   `json:"maxPayload"`
 }

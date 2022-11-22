@@ -56,13 +56,13 @@ type Socket struct {
 	transport        TransportInterface
 	_readyState      string
 	writeBuffer      []*packet.Packet
-	prevBufferLen    uint32
+	prevBufferLen    uint64
 	upgrades         *types.Set[string]
 	pingInterval     time.Duration
 	pingTimeout      time.Duration
 	pingTimeoutTimer *utils.Timer
 	upgrading        bool
-	maxPayload       int64
+	maxPayload       uint64
 	opts             config.SocketOptionsInterface
 	secure           bool
 	hostname         string
@@ -469,13 +469,13 @@ func (s *Socket) resetPingTimeout() {
 // Called on `drain` event
 func (s *Socket) onDrain() {
 	s.muwriteBuffer.Lock()
-	s.writeBuffer = s.writeBuffer[atomic.LoadUint32(&s.prevBufferLen):]
+	s.writeBuffer = s.writeBuffer[atomic.LoadUint64(&s.prevBufferLen):]
 	l := len(s.writeBuffer)
 	s.muwriteBuffer.Unlock()
 	// setting prevBufferLen = 0 is very important
 	// for example, when upgrading, upgrade packet is sent over,
 	// and a nonzero prevBufferLen could cause problems on `drain`
-	atomic.StoreUint32(&s.prevBufferLen, 0)
+	atomic.StoreUint64(&s.prevBufferLen, 0)
 	if 0 == l {
 		s.Emit("drain")
 	} else {
@@ -491,12 +491,12 @@ func (s *Socket) flush() {
 
 	if "closed" != s.readyState() && s.Transport().writable() && !s.Upgrading() && l > 0 {
 		packets := s.getWritablePackets()
-		packets_len := len(packets)
+		packets_len := uint64(len(packets))
 		client_socket_log.Debug("flushing %d packets in socket", packets_len)
 		s.Transport().Send(packets)
 		// keep track of current length of writeBuffer
 		// splice writeBuffer and callbackBuffer on `drain`
-		atomic.StoreUint32(&s.prevBufferLen, packets_len)
+		atomic.StoreUint64(&s.prevBufferLen, packets_len)
 		s.Emit("flush")
 	}
 }
@@ -507,13 +507,13 @@ func (s *Socket) getWritablePackets() []*packet.Packet {
 	defer s.muwriteBuffer.RUnlock()
 
 	l := len(s.writeBuffer)
-	if !(s.maxPayload && s.Transport().Name() == "polling" && l > 1) {
+	if !(s.maxPayload > 0 && s.Transport().Name() == "polling" && l > 1) {
 		return s.writeBuffer
 	}
 	payloadSize := 1 // first packet type
 	for i, data := range s.writeBuffer {
 		if data != nil {
-			payloadSize += data.Len()
+			payloadSize += data.Data.Len() // .... len()
 		}
 		if i > 0 && payloadSize > s.maxPayload {
 			client_socket_log.Debug("only send %d out of %d packets", i, l)
@@ -635,7 +635,7 @@ func (s *Socket) onClose(reason string, description error) {
 		s.muwriteBuffer.Lock()
 		s.writeBuffer = s.writeBuffer[:0]
 		s.muwriteBuffer.Unlock()
-		atomic.StoreUint32(s.prevBufferLen, 0)
+		atomic.StoreUint64(s.prevBufferLen, 0)
 	}
 }
 
