@@ -510,7 +510,7 @@ func (s *Socket) getWritablePackets() []*packet.Packet {
 	if !(s.maxPayload > 0 && s.Transport().Name() == "polling" && l > 1) {
 		return s.writeBuffer
 	}
-	payloadSize := 1 // first packet type
+	payloadSize := uint64(1) // first packet type
 	for i, data := range s.writeBuffer {
 		if data != nil {
 			payloadSize += data.Data.Len() // .... len()
@@ -564,7 +564,8 @@ func (s *Socket) Close() *Socket {
 		client_socket_log.Debug("socket closing - telling transport to close")
 		s.Transport().Close()
 	}
-	cleanupAndClose := func(...any) {
+	var cleanupAndClose events.Listener
+	cleanupAndClose = func(...any) {
 		s.RemoveListener("upgrade", cleanupAndClose)
 		s.RemoveListener("upgradeError", cleanupAndClose)
 		close()
@@ -617,7 +618,7 @@ func (s *Socket) onClose(reason string, description error) {
 		// stop event from firing again for transport
 		s.transport.RemoveAllListeners("close")
 		// ensure transport won't stay open
-		s.transport.close()
+		s.transport.Close()
 		// ignore further transport communication
 		s.transport.Clear()
 		s.mutransport.RUnlock()
@@ -635,7 +636,7 @@ func (s *Socket) onClose(reason string, description error) {
 		s.muwriteBuffer.Lock()
 		s.writeBuffer = s.writeBuffer[:0]
 		s.muwriteBuffer.Unlock()
-		atomic.StoreUint64(s.prevBufferLen, 0)
+		atomic.StoreUint64(&s.prevBufferLen, 0)
 	}
 }
 

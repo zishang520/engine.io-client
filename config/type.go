@@ -2,6 +2,7 @@ package config
 
 import (
 	"crypto/tls"
+	"net/http"
 	"time"
 
 	"github.com/zishang520/engine.io/types"
@@ -69,9 +70,9 @@ type SocketOptionsInterface interface {
 	GetRawTLSClientConfig() *tls.Config
 	SetTLSClientConfig(*tls.Config)
 
-	ExtraHeaders() map[string]string
-	GetRawExtraHeaders() map[string]string
-	SetExtraHeaders(map[string]string)
+	ExtraHeaders() http.Header
+	GetRawExtraHeaders() http.Header
+	SetExtraHeaders(http.Header)
 
 	CloseOnBeforeunload() bool
 	GetRawCloseOnBeforeunload() *bool

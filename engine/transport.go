@@ -1,7 +1,6 @@
 package engine
 
 import (
-	"net/url"
 	"sync"
 
 	"github.com/zishang520/engine.io-client/config"
@@ -19,7 +18,11 @@ var client_transport_log = log.NewLog("engine.io-client:transport")
 type Transport struct {
 	events.EventEmitter
 
-	opts           config.SocketOptionsInterface
+	opts config.SocketOptionsInterface
+
+	httpCompression   *types.HttpCompression
+	perMessageDeflate *types.PerMessageDeflate
+
 	supportsBinary bool
 	query          *utils.ParameterBag
 	_readyState    string
@@ -31,6 +34,13 @@ type Transport struct {
 	doOpen  func()
 	doClose func()
 	write   func([]*packet.Packet)
+}
+
+func (t *Transport) SetPerMessageDeflate(perMessageDeflate *types.PerMessageDeflate) {
+	t.perMessageDeflate = perMessageDeflate
+}
+func (t *Transport) PerMessageDeflate() *types.PerMessageDeflate {
+	return t.perMessageDeflate
 }
 
 // Transport abstract constructor.
@@ -46,6 +56,8 @@ func NewTransport(opts config.SocketOptionsInterface) *Transport {
 	t.doOpen = t._doOpen
 	t.doClose = t._doClose
 	t.write = t._write
+
+	return t
 }
 
 func (t *Transport) Query() *utils.ParameterBag {
@@ -89,7 +101,6 @@ func (t *Transport) Open() {
 		t.setReadyState("opening")
 		t.doOpen()
 	}
-	return t
 }
 
 // Closes the transport.
@@ -120,12 +131,12 @@ func (t *Transport) onOpen() {
 // Called with data.
 func (t *Transport) onData(data types.BufferInterface) {
 	p, _ := parser.Parserv4().DecodePacket(data)
-	t.onPacket(packet)
+	t.onPacket(p)
 }
 
 // Called with a decoded packet.
-func (t *Transport) onPacket(packet *packet.Packet) {
-	t.Emit("packet", packet)
+func (t *Transport) onPacket(data *packet.Packet) {
+	t.Emit("packet", data)
 }
 
 // Called upon close.

@@ -2,8 +2,10 @@ package engine
 
 import (
 	"errors"
+	"io"
 	"net/http"
 	"net/url"
+	"strings"
 	"sync"
 	"time"
 
@@ -12,6 +14,7 @@ import (
 	"github.com/zishang520/engine.io-client/utils"
 	"github.com/zishang520/engine.io/log"
 	"github.com/zishang520/engine.io/packet"
+	"github.com/zishang520/engine.io/parser"
 	"github.com/zishang520/engine.io/types"
 )
 
@@ -64,7 +67,7 @@ func (w *WS) addEventListeners() {
 	w.onOpen()
 	go func() {
 		w.mu_ws.RLock()
-		ws = w.ws
+		ws := w.ws
 		w.mu_ws.RUnlock()
 
 		if ws == nil {
@@ -123,7 +126,7 @@ func (w *WS) _write(packets []*packet.Packet) {
 	// encodePacket efficient as it uses WS framing
 	// no need for encodePayload
 	w.mu_ws.RLock()
-	ws = w.ws
+	ws := w.ws
 	w.mu_ws.RUnlock()
 
 	if ws == nil {
@@ -131,7 +134,7 @@ func (w *WS) _write(packets []*packet.Packet) {
 	}
 
 	for _, packet := range packets {
-		if data, err := parser.Parserv4().EncodePacket(packets, w.supportsBinary); err == nil {
+		if data, err := parser.Parserv4().EncodePacket(packet, w.supportsBinary); err == nil {
 			compress := false
 			if packet.Options != nil {
 				compress = packet.Options.Compress
@@ -189,31 +192,31 @@ func (w *WS) _doClose() {
 // Generates uri for connection.
 func (w *WS) uri() string {
 	_url := &url.URL{
-		Path:   p.opts.Path(),
+		Path:   w.opts.Path(),
 		Scheme: "ws",
 	}
-	if p.opts.Secure() {
+	if w.opts.Secure() {
 		_url.Scheme = "wss"
 	}
-	query := url.Values(p.query.All())
+	query := url.Values(w.query.All())
 	// cache busting is forced
-	if false != p.opts.TimestampRequests() {
-		query.Set(p.opts.TimestampParam(), utils.YeastDate())
+	if false != w.opts.TimestampRequests() {
+		query.Set(w.opts.TimestampParam(), utils.YeastDate())
 	}
-	if !p.supportsBinary {
-		query.Set(b64, "1")
+	if !w.supportsBinary {
+		query.Set("b64", "1")
 	}
 	_url.RawQuery = query.Encode()
 	host := ""
-	if strings.Index(p.opts.Hostname(), ":") > -1 {
-		host += "[" + p.opts.Hostname() + "]"
+	if strings.Index(w.opts.Hostname(), ":") > -1 {
+		host += "[" + w.opts.Hostname() + "]"
 	} else {
-		host += p.opts.Hostname()
+		host += w.opts.Hostname()
 	}
 	port := ""
 	// avoid port if default for schema
-	if p.opts.Port() != "" && (("wss" == _url.Scheme && p.opts.Port() != "443") || ("ws" == _url.Scheme && p.opts.Port() != "80")) {
-		port = ":" + p.opts.Port()
+	if w.opts.Port() != "" && (("wss" == _url.Scheme && w.opts.Port() != "443") || ("ws" == _url.Scheme && w.opts.Port() != "80")) {
+		port = ":" + w.opts.Port()
 	}
 	_url.Host = host + port
 	return _url.String()

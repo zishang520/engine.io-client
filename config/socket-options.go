@@ -2,6 +2,7 @@ package config
 
 import (
 	"crypto/tls"
+	"net/http"
 	"time"
 
 	"github.com/zishang520/engine.io/types"
@@ -80,7 +81,7 @@ type SocketOptions struct {
 
 	// Headers that will be passed for each request to the server (via xhr-polling and via websockets).
 	// These values then can be used during handshake or for special proxies.
-	extraHeaders map[string]string
+	extraHeaders http.Header
 
 	// Whether to automatically close the connection whenever the beforeunload event is received.
 	// @default true
@@ -374,13 +375,13 @@ func (s *SocketOptions) SetTLSClientConfig(tLSClientConfig *tls.Config) {
 	s.tLSClientConfig = tLSClientConfig
 }
 
-func (s *SocketOptions) ExtraHeaders() map[string]string {
+func (s *SocketOptions) ExtraHeaders() http.Header {
 	return s.extraHeaders
 }
-func (s *SocketOptions) GetRawExtraHeaders() map[string]string {
+func (s *SocketOptions) GetRawExtraHeaders() http.Header {
 	return s.extraHeaders
 }
-func (s *SocketOptions) SetExtraHeaders(extraHeaders map[string]string) {
+func (s *SocketOptions) SetExtraHeaders(extraHeaders http.Header) {
 	s.extraHeaders = extraHeaders
 }
 
